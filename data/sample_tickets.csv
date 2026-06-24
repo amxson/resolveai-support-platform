@@ -1,0 +1,6 @@
+ticket_id,customer_name,message
+TICK-001,Alice Johnson,"My order was supposed to arrive three days ago, but the tracking page has not updated and I still do not have the package."
+TICK-002,Brian Lee,"I bought a headset last week and changed my mind. It is unopened. Can I get a refund?"
+TICK-003,Priya Shah,"The blender I received today is cracked and one of the parts is broken. I need a replacement as soon as possible."
+TICK-004,Marco Rivera,"My card was charged twice for the same order, but I only received one confirmation email."
+TICK-005,Emily Chen,"I cannot log in to my account and the password reset email never arrives."
