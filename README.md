@@ -160,6 +160,15 @@ If the frontend cannot reach the API, it intentionally falls back to its bundled
 
 ## Deployment
 
+### Live portfolio deployment
+
+- **Frontend:** [resolveai-support-platform.vercel.app](https://resolveai-support-platform.vercel.app)
+- **Backend API:** [resolveai-support-api.onrender.com](https://resolveai-support-api.onrender.com)
+- **Health check:** [resolveai-support-api.onrender.com/health](https://resolveai-support-api.onrender.com/health)
+- **API documentation:** [resolveai-support-api.onrender.com/docs](https://resolveai-support-api.onrender.com/docs)
+
+The public frontend uses the deterministic demo API and does not require authentication or an external AI key. The free Render service may take up to roughly 50 seconds to wake after a period of inactivity.
+
 ### Backend on Render
 
 The root `render.yaml` contains the service configuration.
@@ -186,7 +195,7 @@ The frontend uses hash-based navigation, so portfolio routes remain stable on st
 
 ## Portfolio screenshots
 
-The repository includes browser-tested screenshots captured at a 1440 × 1000 desktop viewport:
+The repository includes browser-tested screenshots captured from the connected public deployment at a 1440px-wide desktop viewport:
 
 - `screenshots/01-dashboard.png` — metrics, workflow chart, issue mix, recent tickets, and agent stages
 - `screenshots/02-ticket-analysis.png` — ticket message, triage, sentiment, priority, reasoning, knowledge match, reviewed response, and agent activity
