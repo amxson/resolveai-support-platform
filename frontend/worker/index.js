@@ -1,11 +1,9 @@
-/** Cloudflare Worker entry point used by the optional private Sites deployment. */
+/** Keep the legacy Sites URL useful by forwarding it to the public Vercel app. */
 export default {
-  async fetch(request, env) {
-    const response = await env.ASSETS.fetch(request)
-    if (response.status !== 404) return response
-
-    const fallbackUrl = new URL('/index.html', request.url)
-    return env.ASSETS.fetch(new Request(fallbackUrl, request))
+  async fetch(request) {
+    const sourceUrl = new URL(request.url)
+    const destination = new URL(sourceUrl.pathname + sourceUrl.search, 'https://resolveai-support-platform.vercel.app')
+    return Response.redirect(destination, 302)
   },
 }
 
