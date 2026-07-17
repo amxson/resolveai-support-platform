@@ -111,7 +111,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .category-panel { height: 310px; padding: 16px 17px 13px; }
 .icon-plain { border: 0; color: #83908c; background: transparent; }
 .donut-wrap { position: relative; height: 178px; }
-.donut-center, .priority-donut > div { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }
+.donut-center, .priority-center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }
 .donut-center strong, .priority-donut > div strong { font-size: 20px; line-height: 1; }
 .donut-center span, .priority-donut > div span { margin-top: 3px; color: #899691; font-size: 8px; }
 .category-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 13px; }

@@ -343,7 +343,7 @@ function AnalyticsPage({ analytics }: { analytics: Analytics }) {
         </div>
         <div className="panel priority-panel">
           <div className="panel-head"><div><span className="section-kicker">Queue health</span><h2>Priority mix</h2></div></div>
-          <div className="priority-donut"><ResponsiveContainer width="100%" height={210}><PieChart><Pie data={priorityData} dataKey="value" innerRadius={62} outerRadius={84} paddingAngle={5} stroke="none">{priorityData.map((_, index) => <Cell key={index} fill={['#9bb8ae', '#d7a94e', '#c96e57', '#8f4f43'][index]} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer><div><strong>{analytics.total_tickets}</strong><span>total</span></div></div>
+          <div className="priority-donut"><ResponsiveContainer width="100%" height={210}><PieChart><Pie data={priorityData} dataKey="value" innerRadius={62} outerRadius={84} paddingAngle={5} stroke="none">{priorityData.map((_, index) => <Cell key={index} fill={['#9bb8ae', '#d7a94e', '#c96e57', '#8f4f43'][index]} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer><div className="priority-center"><strong>{analytics.total_tickets}</strong><span>total</span></div></div>
           <div className="priority-legend">{priorityData.map((item, index) => <span key={item.name}><i style={{ background: ['#9bb8ae', '#d7a94e', '#c96e57', '#8f4f43'][index] }} />{item.name}<strong>{item.value}</strong></span>)}</div>
         </div>
       </section>
