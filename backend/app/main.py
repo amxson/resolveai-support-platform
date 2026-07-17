@@ -90,7 +90,10 @@ def list_tickets(
 @app.post("/tickets", response_model=Ticket, status_code=201)
 def create_ticket(payload: TicketCreate) -> Ticket:
     ticket = workflow.create_ticket(store.next_id(), payload)
-    return store.save(ticket)
+    try:
+        return store.save(workflow.analyze(ticket))
+    except Exception as error:
+        raise HTTPException(status_code=502, detail=f"Analysis workflow failed: {error}") from error
 
 
 @app.get("/tickets/{ticket_id}", response_model=Ticket)

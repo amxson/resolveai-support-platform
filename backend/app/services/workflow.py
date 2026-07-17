@@ -23,7 +23,7 @@ CATEGORY_RULES = [
     ("Refund Request", ("refund", "return", "money back", "wrong")),
     ("Account Access", ("login", "log in", "password", "locked out", "reset")),
     ("Damaged Product", ("damaged", "cracked", "broken", "crushed")),
-    ("Delivery Issue", ("delivery", "tracking", "shipment", "package", "late")),
+    ("Delivery Issue", ("delivery", "tracking", "shipment", "package", "late", "delayed")),
     ("Pricing Question", ("pricing", "plan", "tier", "billing", "team")),
 ]
 
@@ -56,6 +56,7 @@ class WorkflowService:
                 initials=initials,
             ),
             channel=payload.channel,
+            reference_id=payload.reference_id,
             created_at=now,
             updated_at=now,
         )
@@ -79,9 +80,10 @@ class WorkflowService:
         sentiment = self._sentiment(message)
         priority = self._priority(message, category, sentiment)
         article = self._match_article(category)
+        delay_risk = any(signal in message for signal in ("delayed", "late", "six days", "6 days"))
         escalation_needed = priority == "Urgent" or category in {"Technical Bug"} or (
             priority == "High" and category in {"Delivery Issue", "Payment Issue", "Account Access"}
-        )
+        ) or (category == "Refund Request" and delay_risk)
         status = status_override or ("Escalated" if escalation_needed else "In Review")
         confidence = self._confidence(category, message)
         draft = self._draft_reply(ticket, category, escalation_needed)
@@ -192,7 +194,7 @@ class WorkflowService:
             "Damaged Product",
         }:
             return "Urgent"
-        if category == "Technical Bug" or "charged" in message or "six days" in message:
+        if category == "Technical Bug" or "charged" in message or any(delay in message for delay in ("six days", "6 days")):
             return "High"
         if sentiment in {"Frustrated", "Negative"} or category in {"Refund Request", "Delivery Issue"}:
             return "Medium"
@@ -231,6 +233,7 @@ class WorkflowService:
                 "Account Access": "account security",
                 "Delivery Issue": "shipping operations",
                 "Payment Issue": "billing",
+                "Refund Request": "refunds and shipping operations",
             }.get(category, "a support specialist")
             return f"Route to {team} for human review before sending"
         return "Approve the suggested reply or edit it before sending"
@@ -238,6 +241,10 @@ class WorkflowService:
     @staticmethod
     def _draft_reply(ticket: Ticket, category: str, escalation_needed: bool) -> str:
         first_name = ticket.customer.name.split()[0]
+        message = ticket.message.lower()
+        delayed_refund = category == "Refund Request" and any(
+            signal in message for signal in ("delayed", "late", "tracking", "shipment", "delivery")
+        )
         openers = {
             "Delivery Issue": "I’m sorry your delivery is late and that tracking has stopped updating.",
             "Refund Request": "I can help with your return request for the unopened item.",
@@ -254,8 +261,14 @@ class WorkflowService:
             "Damaged Product": "Please keep the packaging and send photos of the damage if you have not already. We’ll review them for a replacement or refund.",
             "Pricing Question": "Priority support and billing options depend on the current plan configuration, so a sales specialist should confirm the exact terms for 12 seats.",
         }
+        if delayed_refund:
+            openers["Refund Request"] = "I’m sorry your order is delayed and that you haven’t received a clear update."
+            actions["Refund Request"] = (
+                "We’ll check the latest shipment status and review the refund options available for your order."
+            )
+        reference = f" We’ll use reference {ticket.reference_id} during the review." if ticket.reference_id else ""
         escalation = " I’ve flagged this for specialist review before any reply is sent." if escalation_needed else ""
-        return f"Hi {first_name},\n\n{openers.get(category, 'Thanks for contacting support.')} {actions.get(category, 'We’ll review the details and confirm the next best step.')}\n\n{escalation}\n\nBest,\nSupport team"
+        return f"Hi {first_name},\n\n{openers.get(category, 'Thanks for contacting support.')} {actions.get(category, 'We’ll review the details and confirm the next best step.')}{reference}\n\n{escalation}\n\nBest,\nSupport team"
 
     @staticmethod
     def _polish_reply(draft: str, category: str) -> str:

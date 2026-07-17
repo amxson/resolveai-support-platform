@@ -1,4 +1,13 @@
-export type View = 'dashboard' | 'tickets' | 'ticket' | 'knowledge' | 'analytics'
+export type View = 'dashboard' | 'tickets' | 'new-ticket' | 'ticket' | 'knowledge' | 'analytics'
+
+export interface TicketCreateInput {
+  customer_name: string
+  customer_email: string
+  subject: string
+  message: string
+  channel: 'Email' | 'Chat' | 'Web Form'
+  reference_id?: string
+}
 
 export interface AgentStep {
   name: string
@@ -37,6 +46,7 @@ export interface Ticket {
   message: string
   customer: Customer
   channel: string
+  reference_id?: string | null
   created_at: string
   updated_at: string
   category: string

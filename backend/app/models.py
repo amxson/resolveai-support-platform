@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -63,7 +64,8 @@ class TicketCreate(BaseModel):
     message: str = Field(min_length=10, max_length=5000)
     customer_name: str = Field(min_length=2, max_length=100)
     customer_email: EmailStr
-    channel: str = "Email"
+    channel: Literal["Email", "Chat", "Web Form"] = "Email"
+    reference_id: str | None = Field(default=None, max_length=80)
 
 
 class Ticket(BaseModel):
@@ -74,6 +76,7 @@ class Ticket(BaseModel):
     message: str
     customer: Customer
     channel: str = "Email"
+    reference_id: str | None = None
     created_at: datetime
     updated_at: datetime
     category: str = "Unclassified"

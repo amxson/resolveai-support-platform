@@ -8,7 +8,8 @@ ResolveAI Support Platform is an **AI-powered customer support operations protot
 
 ## What the prototype demonstrates
 
-- Structured ticket intake and a filterable support inbox
+- Interactive ticket intake that creates, analyzes, and routes a custom issue in one flow
+- A filterable support inbox that immediately includes newly created demo tickets
 - Category, priority, urgency, and sentiment detection
 - Knowledge-base retrieval with visible match evidence
 - Draft response generation and a separately reviewed final response
@@ -52,7 +53,7 @@ Demo mode is deterministic and requires no external API key. It returns the same
 | --- | --- | --- |
 | `GET` | `/health` | Runtime and demo/AI mode status |
 | `GET` | `/tickets` | List tickets; filter by status, priority, or category |
-| `POST` | `/tickets` | Create a new ticket |
+| `POST` | `/tickets` | Create a new ticket and run the complete analysis workflow |
 | `GET` | `/tickets/{id}` | Retrieve one ticket and its workflow evidence |
 | `POST` | `/tickets/{id}/analyze` | Run triage, retrieval, drafting, review, and routing |
 | `POST` | `/tickets/{id}/generate-response` | Generate or return the reviewed response |
@@ -167,7 +168,7 @@ If the frontend cannot reach the API, it intentionally falls back to its bundled
 - **Health check:** [resolveai-support-api.onrender.com/health](https://resolveai-support-api.onrender.com/health)
 - **API documentation:** [resolveai-support-api.onrender.com/docs](https://resolveai-support-api.onrender.com/docs)
 
-The public frontend uses the deterministic demo API and does not require authentication or an external AI key. The free Render service may take up to roughly 50 seconds to wake after a period of inactivity.
+The public frontend uses the deterministic demo API and does not require authentication or an external AI key. Select **Try AI triage**, enter a fictional customer issue, and the app will open the completed analysis before adding the ticket to the inbox. The free Render service may take up to roughly 50 seconds to wake after a period of inactivity.
 
 ### Backend on Render
 
@@ -198,13 +199,13 @@ The frontend uses hash-based navigation, so portfolio routes remain stable on st
 The repository includes browser-tested screenshots captured from the connected public deployment at a 1440px-wide desktop viewport:
 
 - `screenshots/01-dashboard.png` — metrics, workflow chart, issue mix, recent tickets, and agent stages
-- `screenshots/02-ticket-analysis.png` — ticket message, triage, sentiment, priority, reasoning, knowledge match, reviewed response, and agent activity
-- `screenshots/03-analytics-or-knowledge-base.png` — illustrative resolution, priority, category, and agent-stage analytics
+- `screenshots/02-new-ticket.png` — professional customer issue intake and the five-stage AI workflow preview
+- `screenshots/03-ticket-analysis.png` — a custom delayed-order request with triage, knowledge match, reviewed response, next action, and escalation guidance
 
 ## Suggested Upwork portfolio description
 
 > **AI-Powered Customer Support Platform Prototype**  
-> I built a portfolio-grade customer support operations prototype using React, TypeScript, FastAPI, Python, and CrewAI. It demonstrates a five-stage multi-agent workflow for ticket triage, sentiment and urgency detection, knowledge-base retrieval, response drafting, quality review, escalation routing, and human approval. The project includes a responsive support inbox, evidence-rich ticket analysis, analytics dashboards, a documented REST API, automated tests, demo-mode fallback, and deployment configuration. All customers, policies, tickets, and metrics shown are fictional demonstration data; the project is not represented as a production system used by a real company.
+> I built a portfolio-grade customer support operations prototype using React, TypeScript, FastAPI, Python, and CrewAI. Clients can enter a fictional customer issue and test a complete five-stage workflow for ticket triage, sentiment and urgency detection, knowledge-base retrieval, response drafting, quality review, escalation routing, and human approval. The project includes a responsive support inbox, evidence-rich ticket analysis, analytics dashboards, a documented REST API, automated tests, deterministic no-key demo mode, and public deployment. All customers, policies, tickets, and metrics shown are fictional demonstration data; the project is not represented as a production system used by a real company.
 
 ## Current limitations and next steps
 

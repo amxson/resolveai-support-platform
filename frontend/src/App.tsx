@@ -1,24 +1,25 @@
-import { useEffect, useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import {
-  Activity, AlertTriangle, ArrowLeft, ArrowRight, BarChart3, BookOpen, Bot,
+  Activity, AlertTriangle, ArrowLeft, ArrowRight, AtSign, BarChart3, BookOpen, Bot,
   Check, CheckCircle2, ChevronDown, CircleDot, Clock3, Copy, Filter, Gauge,
-  Headphones, Inbox, LayoutDashboard, Menu, MessageSquareText, MoreHorizontal,
-  Search, Send, ShieldCheck, Sparkles, Target, TicketCheck, TrendingUp, UserRound,
+  Hash, Headphones, Inbox, LayoutDashboard, LoaderCircle, Menu, MessageSquareText, MoreHorizontal,
+  Plus, Search, Send, ShieldCheck, Sparkles, Target, TicketCheck, TrendingUp, UserRound,
   Users, WandSparkles, X, Zap,
 } from 'lucide-react'
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
-import { loadPlatformData } from './api'
+import { createTicket, loadPlatformData } from './api'
 import { mockAnalytics, mockKnowledge, mockTickets } from './mockData'
-import type { Analytics, KnowledgeArticle, Ticket, View } from './types'
+import type { Analytics, KnowledgeArticle, Ticket, TicketCreateInput, View } from './types'
 
 const CHART_COLORS = ['#2f7d68', '#d7a94e', '#667872', '#c96e57', '#9bb8ae', '#d9dfda']
 
 const viewTitles: Record<View, { eyebrow: string; title: string; description: string }> = {
   dashboard: { eyebrow: 'Operations overview', title: 'Support operations', description: 'Monitor the fictional demo queue and multi-agent workflow.' },
   tickets: { eyebrow: 'Ticket workspace', title: 'Support inbox', description: 'Review, filter, and inspect AI-assisted demo tickets.' },
+  'new-ticket': { eyebrow: 'Interactive workflow', title: 'Try AI triage', description: 'Submit a fictional customer issue and inspect the complete support workflow.' },
   ticket: { eyebrow: 'Ticket analysis', title: 'Ticket intelligence', description: 'Inspect the workflow evidence before a human sends the response.' },
   knowledge: { eyebrow: 'Reference library', title: 'Knowledge base', description: 'Fictional policy articles used by the retrieval workflow.' },
   analytics: { eyebrow: 'Workflow reporting', title: 'Analytics', description: 'Explore demonstration metrics and support workflow patterns.' },
@@ -26,6 +27,7 @@ const viewTitles: Record<View, { eyebrow: string; title: string; description: st
 
 function getInitialRoute(): { view: View; ticketId?: string } {
   const route = window.location.hash.replace(/^#\/?/, '')
+  if (route === 'tickets/new') return { view: 'new-ticket' }
   if (route.startsWith('tickets/')) return { view: 'ticket', ticketId: route.split('/')[1] }
   if (['dashboard', 'tickets', 'knowledge', 'analytics'].includes(route)) return { view: route as View }
   return { view: 'dashboard' }
@@ -50,10 +52,10 @@ function Avatar({ ticket, small = false }: { ticket: Ticket; small?: boolean }) 
   return <div className={`avatar ${palette[index]} ${small ? 'avatar-small' : ''}`}>{ticket.customer.initials}</div>
 }
 
-function Sidebar({ view, navigate, mobileOpen, close }: { view: View; navigate: (view: View, ticketId?: string) => void; mobileOpen: boolean; close: () => void }) {
+function Sidebar({ view, navigate, mobileOpen, close, ticketCount }: { view: View; navigate: (view: View, ticketId?: string) => void; mobileOpen: boolean; close: () => void; ticketCount: number }) {
   const nav = [
     { id: 'dashboard' as View, label: 'Overview', icon: LayoutDashboard },
-    { id: 'tickets' as View, label: 'Ticket inbox', icon: Inbox, count: 6 },
+    { id: 'tickets' as View, label: 'Ticket inbox', icon: Inbox, count: ticketCount },
     { id: 'knowledge' as View, label: 'Knowledge base', icon: BookOpen },
     { id: 'analytics' as View, label: 'Analytics', icon: BarChart3 },
   ]
@@ -70,7 +72,7 @@ function Sidebar({ view, navigate, mobileOpen, close }: { view: View; navigate: 
           <span className="nav-label">Workspace</span>
           {nav.map((item) => {
             const Icon = item.icon
-            const active = view === item.id || (view === 'ticket' && item.id === 'tickets')
+            const active = view === item.id || (['ticket', 'new-ticket'].includes(view) && item.id === 'tickets')
             return (
               <button key={item.id} className={`nav-item ${active ? 'active' : ''}`} onClick={() => { navigate(item.id); close() }}>
                 <Icon size={18} /><span>{item.label}</span>{item.count && <em>{item.count}</em>}
@@ -150,7 +152,7 @@ function Dashboard({ tickets, analytics, navigate }: { tickets: Ticket[]; analyt
   const categoryData = Object.entries(analytics.by_category).map(([name, value]) => ({ name, value }))
   return (
     <div className="page-content dashboard-page">
-      <section className="prototype-note"><div><ShieldCheck size={18} /><span><strong>Demonstration environment</strong>All tickets, customers, policies, and performance metrics are fictional portfolio data.</span></div><span className="mode-chip">Demo mode</span></section>
+      <section className="prototype-note"><div><ShieldCheck size={18} /><span><strong>Demonstration environment</strong>All tickets, customers, policies, and performance metrics are fictional portfolio data.</span></div><div className="prototype-actions"><span className="mode-chip">Demo mode</span><button className="primary-button" onClick={() => navigate('new-ticket')}><Sparkles size={15} />Try AI triage</button></div></section>
       <section className="metrics-grid">
         <MetricCard label="Tickets in demo" value={analytics.total_tickets} detail="Fictional seeded cases" icon={Inbox} tone="sage" trend="12% sample lift" />
         <MetricCard label="High impact" value={analytics.urgent_tickets} detail="High or urgent priority" icon={AlertTriangle} tone="amber" />
@@ -229,11 +231,64 @@ function TicketsPage({ tickets, navigate }: { tickets: Ticket[]; navigate: (view
           <div className="filter-group">
             <label><Filter size={16} /><select value={status} onChange={(e) => setStatus(e.target.value)}><option>All statuses</option><option>New</option><option>In Review</option><option>Escalated</option><option>Resolved</option></select></label>
             <label><select value={priority} onChange={(e) => setPriority(e.target.value)}><option>All priorities</option><option>Low</option><option>Medium</option><option>High</option><option>Urgent</option></select></label>
+            <button className="primary-button" onClick={() => navigate('new-ticket')}><Plus size={15} />New ticket</button>
           </div>
         </div>
         <div className="inbox-result-line"><span>{filtered.length} demo tickets</span><small>Sorted by most recent</small></div>
         {filtered.length ? <TicketTable tickets={filtered} navigate={navigate} /> : <div className="empty-state"><Search size={30} /><h3>No tickets match</h3><p>Try clearing one of the filters.</p></div>}
       </section>
+    </div>
+  )
+}
+
+function NewTicketPage({ navigate, onCreate }: { navigate: (view: View, ticketId?: string) => void; onCreate: (payload: TicketCreateInput) => Promise<void> }) {
+  const [form, setForm] = useState<TicketCreateInput>({
+    customer_name: '', customer_email: '', subject: '', message: '', channel: 'Email', reference_id: '',
+  })
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const update = (field: keyof TicketCreateInput, value: string) => setForm((current) => ({ ...current, [field]: value }))
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setSubmitting(true); setError('')
+    try {
+      await onCreate({ ...form, reference_id: form.reference_id?.trim() || undefined })
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'The ticket could not be analyzed. Please try again.')
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="page-content intake-page">
+      <div className="detail-topline"><button className="back-button" onClick={() => navigate('tickets')}><ArrowLeft size={17} />Back to inbox</button><span className="intake-demo-status"><i />Deterministic demo engine ready</span></div>
+      <section className="intake-hero">
+        <div><span className="section-kicker light">New support request</span><h2>Turn a customer message into an actionable ticket.</h2><p>ResolveAI classifies the issue, retrieves guidance, drafts a reply, reviews quality, and recommends the next action.</p></div>
+        <div className="intake-stage-count"><strong>5</strong><span>workflow stages</span></div>
+      </section>
+      <div className="intake-layout">
+        <form className="panel intake-form" onSubmit={submit}>
+          <div className="panel-head"><div><span className="section-kicker">Ticket intake</span><h2>Customer and issue details</h2><p>Use fictional information only in this public portfolio demo.</p></div><span className="required-note">* Required</span></div>
+          <div className="form-grid">
+            <label><span>Customer name *</span><div className="field-shell"><UserRound size={16} /><input required minLength={2} value={form.customer_name} onChange={(e) => update('customer_name', e.target.value)} placeholder="Jordan Lee" /></div></label>
+            <label><span>Customer email *</span><div className="field-shell"><AtSign size={16} /><input required type="email" value={form.customer_email} onChange={(e) => update('customer_email', e.target.value)} placeholder="jordan.lee@example.com" /></div></label>
+            <label className="form-wide"><span>Subject *</span><div className="field-shell"><MessageSquareText size={16} /><input required minLength={4} maxLength={140} value={form.subject} onChange={(e) => update('subject', e.target.value)} placeholder="Delayed order and refund request" /></div></label>
+            <label className="form-wide"><span>Message / customer complaint *</span><textarea required minLength={10} maxLength={5000} rows={7} value={form.message} onChange={(e) => update('message', e.target.value)} placeholder="My order has been delayed for 6 days and I’m frustrated. I want a refund or a clear update." /><small>{form.message.length}/5000 characters</small></label>
+            <label><span>Channel</span><div className="field-shell"><Headphones size={16} /><select value={form.channel} onChange={(e) => update('channel', e.target.value)}><option>Email</option><option>Chat</option><option>Web Form</option></select></div></label>
+            <label><span>Order or account ID <em>Optional</em></span><div className="field-shell"><Hash size={16} /><input maxLength={80} value={form.reference_id} onChange={(e) => update('reference_id', e.target.value)} placeholder="ORDER-48291" /></div></label>
+          </div>
+          {error && <div className="form-error" role="alert"><AlertTriangle size={16} /><span><strong>Analysis unavailable</strong>{error}</span></div>}
+          <div className="form-actions"><button type="button" className="secondary-button" onClick={() => navigate('tickets')}>Cancel</button><button type="submit" className="primary-button intake-submit" disabled={submitting}>{submitting ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}{submitting ? 'Running AI workflow…' : 'Create ticket & run AI triage'}</button></div>
+        </form>
+        <aside className="intake-workflow">
+          <div className="workflow-card-head"><div className="workflow-icon"><Bot size={21} /></div><div><span>What happens next</span><strong>Support intelligence workflow</strong></div></div>
+          <div className="intake-steps">{[
+            ['01', 'Triage', 'Category, urgency, and sentiment'], ['02', 'Knowledge match', 'Relevant demo policy guidance'],
+            ['03', 'Response drafting', 'Context-aware customer reply'], ['04', 'Quality review', 'Tone, safety, and policy checks'],
+            ['05', 'Decision routing', 'Next action and escalation'],
+          ].map(([number, title, detail]) => <div key={number}><em>{number}</em><span><strong>{title}</strong><small>{detail}</small></span><CheckCircle2 size={15} /></div>)}</div>
+          <div className="demo-engine-note"><ShieldCheck size={17} /><span><strong>No API key required</strong>The deterministic demo engine analyzes any message and keeps a human review checkpoint.</span></div>
+        </aside>
+      </div>
     </div>
   )
 }
@@ -290,9 +345,9 @@ function TicketDetail({ ticket, navigate }: { ticket: Ticket; navigate: (view: V
           <section className="panel customer-panel">
             <div className="aside-heading"><span>Customer</span><button><MoreHorizontal size={17} /></button></div>
             <div className="profile"><Avatar ticket={ticket} /><div><strong>{ticket.customer.name}</strong><span>{ticket.customer.email}</span></div></div>
-            <dl><div><dt>Plan</dt><dd>{ticket.customer.plan}</dd></div><div><dt>Channel</dt><dd>{ticket.channel}</dd></div><div><dt>Previous tickets</dt><dd>3 demo cases</dd></div></dl>
+            <dl><div><dt>Plan</dt><dd>{ticket.customer.plan}</dd></div><div><dt>Channel</dt><dd>{ticket.channel}</dd></div>{ticket.reference_id && <div><dt>Order / account</dt><dd>{ticket.reference_id}</dd></div>}<div><dt>Previous tickets</dt><dd>3 demo cases</dd></div></dl>
           </section>
-          <section className="next-action-card"><div><Zap size={18} /><span>Suggested next action</span></div><p>{ticket.suggested_next_action}</p><button><UserRound size={15} />Assign for review</button></section>
+          <section className="next-action-card"><div><Zap size={18} /><span>Suggested next action</span></div><p>{ticket.suggested_next_action}</p><div className={`escalation-callout ${ticket.escalation_needed ? 'recommended' : ''}`}><AlertTriangle size={14} /><span><strong>{ticket.escalation_needed ? 'Escalation recommended' : 'No escalation required'}</strong>{ticket.escalation_needed ? 'A specialist should review this ticket before the reply is sent.' : 'Standard human approval is the appropriate checkpoint.'}</span></div><button><UserRound size={15} />Assign for review</button></section>
           <section className="panel timeline-panel">
             <div className="aside-heading"><span>Agent activity</span><small>1.9s demo run</small></div>
             <div className="timeline">{ticket.agent_steps.map((step, index) => <div className="timeline-step" key={step.name}><div className="timeline-dot"><Check size={11} /></div><div><strong>{step.name}</strong><span>{step.role}</span><p>{step.summary}</p><small>{step.confidence}% confidence · {step.duration_ms}ms</small></div>{index < ticket.agent_steps.length - 1 && <i />}</div>)}</div>
@@ -397,6 +452,8 @@ export default function App() {
     if (next === 'ticket') {
       const selected = id || ticketId
       setTicketId(selected); window.location.hash = `/tickets/${selected}`
+    } else if (next === 'new-ticket') {
+      window.location.hash = '/tickets/new'
     } else {
       window.location.hash = `/${next}`
     }
@@ -406,15 +463,26 @@ export default function App() {
 
   const selectedTicket = useMemo(() => tickets.find((ticket) => ticket.id === ticketId) || tickets[0], [tickets, ticketId])
 
+  const handleCreateTicket = async (payload: TicketCreateInput) => {
+    const ticket = await createTicket(payload)
+    setTickets((current) => [ticket, ...current.filter((item) => item.id !== ticket.id)])
+    setSource('api')
+    navigate('ticket', ticket.id)
+    loadPlatformData().then((data) => {
+      setTickets(data.tickets); setAnalytics(data.analytics); setKnowledge(data.knowledge); setSource(data.source)
+    })
+  }
+
   if (loading) return <LoadingScreen />
 
   return (
     <div className="app-shell">
-      <Sidebar view={view} navigate={navigate} mobileOpen={mobileOpen} close={() => setMobileOpen(false)} />
+      <Sidebar view={view} navigate={navigate} mobileOpen={mobileOpen} close={() => setMobileOpen(false)} ticketCount={tickets.length} />
       <div className="main-shell">
         <Header view={view} source={source} onMenu={() => setMobileOpen(true)} />
         {view === 'dashboard' && <Dashboard tickets={tickets} analytics={analytics} navigate={navigate} />}
         {view === 'tickets' && <TicketsPage tickets={tickets} navigate={navigate} />}
+        {view === 'new-ticket' && <NewTicketPage navigate={navigate} onCreate={handleCreateTicket} />}
         {view === 'ticket' && selectedTicket && <TicketDetail ticket={selectedTicket} navigate={navigate} />}
         {view === 'knowledge' && <KnowledgePage knowledge={knowledge} />}
         {view === 'analytics' && <AnalyticsPage analytics={analytics} />}
