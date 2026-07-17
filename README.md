@@ -1,8 +1,8 @@
-# ResolveAI — Customer Support Intelligence Prototype
+# ResolveAI Support Platform
 
 ![ResolveAI dashboard](screenshots/01-dashboard.png)
 
-ResolveAI is an **AI-powered customer support platform prototype** built to demonstrate multi-agent automation, ticket triage, response drafting, knowledge retrieval, quality review, and support workflow intelligence.
+ResolveAI Support Platform is an **AI-powered customer support operations prototype** built to demonstrate multi-agent automation, ticket triage, response drafting, knowledge retrieval, quality review, escalation decisions, and support analytics.
 
 > **Portfolio disclosure:** this project is not presented as software used by a real company. The customers, tickets, policies, analytics, performance figures, operator profile, and product name in the demo are fictional. They exist to make the workflow easy to evaluate without exposing real support data.
 

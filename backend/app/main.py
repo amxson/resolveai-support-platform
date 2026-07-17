@@ -1,4 +1,4 @@
-"""FastAPI entry point for the customer support intelligence prototype."""
+"""FastAPI entry point for ResolveAI Support Platform."""
 
 from collections import Counter
 

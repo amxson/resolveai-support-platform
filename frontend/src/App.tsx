@@ -17,7 +17,7 @@ import type { Analytics, KnowledgeArticle, Ticket, View } from './types'
 const CHART_COLORS = ['#2f7d68', '#d7a94e', '#667872', '#c96e57', '#9bb8ae', '#d9dfda']
 
 const viewTitles: Record<View, { eyebrow: string; title: string; description: string }> = {
-  dashboard: { eyebrow: 'Operations overview', title: 'Support intelligence', description: 'Monitor the fictional demo queue and multi-agent workflow.' },
+  dashboard: { eyebrow: 'Operations overview', title: 'Support operations', description: 'Monitor the fictional demo queue and multi-agent workflow.' },
   tickets: { eyebrow: 'Ticket workspace', title: 'Support inbox', description: 'Review, filter, and inspect AI-assisted demo tickets.' },
   ticket: { eyebrow: 'Ticket analysis', title: 'Ticket intelligence', description: 'Inspect the workflow evidence before a human sends the response.' },
   knowledge: { eyebrow: 'Reference library', title: 'Knowledge base', description: 'Fictional policy articles used by the retrieval workflow.' },
@@ -62,7 +62,7 @@ function Sidebar({ view, navigate, mobileOpen, close }: { view: View; navigate: 
       <aside className={`sidebar ${mobileOpen ? 'sidebar-open' : ''}`}>
         <div className="brand-row">
           <div className="brand-mark"><span /><CircleDot size={18} /></div>
-          <div><div className="brand-name">ResolveAI</div><div className="brand-subtitle">Support intelligence</div></div>
+          <div><div className="brand-name">ResolveAI</div><div className="brand-subtitle">Support Platform</div></div>
           <button className="sidebar-close" onClick={close} aria-label="Close navigation"><X size={20} /></button>
         </div>
         <div className="demo-badge"><Sparkles size={14} /><span><strong>Portfolio prototype</strong><small>Fictional demo workspace</small></span></div>
@@ -365,7 +365,7 @@ function AnalyticsPage({ analytics }: { analytics: Analytics }) {
 }
 
 function LoadingScreen() {
-  return <div className="loading-screen"><div className="loading-mark"><Bot size={26} /></div><strong>Preparing support intelligence</strong><span>Loading the demonstration workspace…</span></div>
+  return <div className="loading-screen"><div className="loading-mark"><Bot size={26} /></div><strong>Preparing support operations</strong><span>Loading the demonstration workspace…</span></div>
 }
 
 export default function App() {

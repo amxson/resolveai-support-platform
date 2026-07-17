@@ -1,2 +1,2 @@
-"""ResolveAI customer support prototype API."""
+"""ResolveAI Support Platform API."""
 
