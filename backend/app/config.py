@@ -1,9 +1,11 @@
 """Runtime configuration for the API."""
 
+import json
 from functools import lru_cache
+from typing import Annotated
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -15,7 +17,7 @@ class Settings(BaseSettings):
     fallback_on_ai_error: bool = True
     gemini_api_key: str = ""
     gemini_model: str = "gemini/gemini-2.0-flash"
-    cors_origins: list[str] = Field(
+    cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "http://localhost:5173",
             "http://127.0.0.1:5173",
@@ -36,8 +38,11 @@ class Settings(BaseSettings):
     @classmethod
     def parse_origins(cls, value: object) -> object:
         """Accept either JSON arrays or comma-separated origin strings."""
-        if isinstance(value, str) and not value.lstrip().startswith("["):
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.startswith("["):
+                return json.loads(stripped)
+            return [origin.strip() for origin in stripped.split(",") if origin.strip()]
         return value
 
 
