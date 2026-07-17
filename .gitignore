@@ -3,3 +3,8 @@
 __pycache__/
 *.pyc
 .env.local
+node_modules/
+dist/
+.pytest_cache/
+*.tsbuildinfo
+.DS_Store
