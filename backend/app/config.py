@@ -15,7 +15,10 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
     demo_mode: bool = True
     fallback_on_ai_error: bool = True
-    gemini_api_key: str = ""
+    gemini_api_key: str = Field(default="", repr=False)
+    api_token: str = Field(default="", repr=False)
+    max_tickets: int = Field(default=500, ge=6, le=5000)
+    writes_per_minute: int = Field(default=30, ge=1, le=300)
     gemini_model: str = "gemini/gemini-2.0-flash"
     cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
@@ -50,4 +53,3 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Return a cached settings instance."""
     return Settings()
-

@@ -60,6 +60,8 @@ class QualityReview(BaseModel):
 
 
 class TicketCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     subject: str = Field(min_length=4, max_length=140)
     message: str = Field(min_length=10, max_length=5000)
     customer_name: str = Field(min_length=2, max_length=100)
@@ -86,7 +88,9 @@ class Ticket(BaseModel):
     confidence: int = Field(default=0, ge=0, le=100)
     escalation_needed: bool = False
     suggested_next_action: str = "Run AI analysis"
-    reasoning_summary: str = "Waiting for the prototype workflow to analyze this ticket."
+    reasoning_summary: str = (
+        "Waiting for the prototype workflow to analyze this ticket."
+    )
     knowledge_match: KnowledgeMatch | None = None
     draft_response: str = ""
     final_response: str = ""
@@ -129,4 +133,3 @@ class HealthResponse(BaseModel):
     version: str
     ai_provider_configured: bool
     message: str
-

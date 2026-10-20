@@ -151,6 +151,10 @@ pip install -r backend/requirements-ai.txt
 
 Then set `DEMO_MODE=false` and provide `GEMINI_API_KEY`. External model behavior and cost depend on the configured provider; demo mode remains the recommended portfolio setting.
 
+Public demo writes are limited to 30 requests per minute per process and 500 stored tickets. Capacity and concurrency limits return `503`; rate limits return `429` with `Retry-After`. Set `WRITES_PER_MINUTE` and `MAX_TICKETS` to tune these limits. In-memory limits are per process: use a shared gateway limiter for a multi-instance deployment.
+
+AI-mode writes require `API_TOKEN` and `Authorization: Bearer <token>`. The public browser demo intentionally uses no paid key; never expose an operator token in frontend build variables. All tickets remain public fictional demo data.
+
 ### Frontend
 
 | Variable | Required | Description |
@@ -211,7 +215,7 @@ The repository includes browser-tested screenshots captured from the connected p
 
 - Ticket persistence is intentionally in memory; a production implementation would add PostgreSQL and migrations.
 - Demo authentication and role-based access are not included.
-- AI mode requires an external provider key and should add rate limiting, tracing, prompt evaluation, and cost controls before any production use.
+- AI mode requires an external provider key and an operator bearer token. Tracing, prompt evaluation, and account-level cost controls remain deployment work.
 - The interface creates and reviews suggested responses; it does not send email or modify a real support system.
 - Production use would require company-specific policy review, security testing, privacy controls, audit logs, accessibility testing, and human escalation procedures.
 

@@ -7,6 +7,7 @@ import re
 from datetime import datetime, timezone
 
 from app.config import Settings
+from app.data import KNOWLEDGE_ARTICLES
 from app.models import AgentStep, KnowledgeMatch, QualityReview, Ticket
 
 
@@ -26,13 +27,21 @@ def run_crewai_workflow(ticket: Ticket, settings: Settings) -> Ticket:
         api_key=settings.gemini_api_key,
         temperature=0.2,
         max_tokens=2500,
+        timeout=30,
+        max_retries=1,
     )
     roles = [
         ("Triage Agent", "Classify category, priority, urgency, and sentiment."),
         ("Knowledge Base Agent", "Select the most relevant provided policy article."),
         ("Response Writer Agent", "Draft an empathetic and policy-grounded response."),
-        ("Quality Review Agent", "Check tone, safety, accuracy, and unsupported promises."),
-        ("Decision Agent", "Choose escalation, status, confidence, and the final next action."),
+        (
+            "Quality Review Agent",
+            "Check tone, safety, accuracy, and unsupported promises.",
+        ),
+        (
+            "Decision Agent",
+            "Choose escalation, status, confidence, and the final next action.",
+        ),
     ]
     agents = [
         Agent(
@@ -45,10 +54,7 @@ def run_crewai_workflow(ticket: Ticket, settings: Settings) -> Ticket:
         )
         for role, goal in roles
     ]
-    policy_context = (
-        "KB-001 delivery delays; KB-002 refunds; KB-003 account recovery; "
-        "KB-004 checkout and duplicate charges; KB-005 damaged products; KB-006 pricing."
-    )
+    policy_context = json.dumps(KNOWLEDGE_ARTICLES, ensure_ascii=False)
     tasks: list[Task] = []
     instructions = [
         f"Analyze ticket {ticket.id}: {ticket.message}",
@@ -65,12 +71,16 @@ def run_crewai_workflow(ticket: Ticket, settings: Settings) -> Ticket:
         tasks.append(
             Task(
                 description=description,
-                expected_output="A concise stage result." if index < 4 else "One valid JSON object.",
+                expected_output=(
+                    "A concise stage result." if index < 4 else "One valid JSON object."
+                ),
                 agent=agent,
                 context=tasks.copy(),
             )
         )
-    result = Crew(agents=agents, tasks=tasks, process=Process.sequential, verbose=False).kickoff()
+    result = Crew(
+        agents=agents, tasks=tasks, process=Process.sequential, verbose=False
+    ).kickoff()
     payload = _extract_json(str(getattr(result, "raw", result)))
     confidence = max(0, min(100, int(payload.get("confidence", 85))))
     article_score = max(0, min(100, int(payload.get("article_score", confidence))))
@@ -85,20 +95,27 @@ def run_crewai_workflow(ticket: Ticket, settings: Settings) -> Ticket:
         )
         for role, goal in roles
     ]
-    return ticket.model_copy(
-        update={
+    result = ticket.model_dump()
+    result.update(
+        {
             "category": payload.get("category", "General Question"),
             "priority": payload.get("priority", "Medium"),
             "sentiment": payload.get("sentiment", "Neutral"),
             "status": payload.get("status", "In Review"),
             "confidence": confidence,
-            "escalation_needed": bool(payload.get("escalation_needed", False)),
-            "suggested_next_action": payload.get("suggested_next_action", "Human review"),
-            "reasoning_summary": payload.get("reasoning_summary", "CrewAI analysis completed."),
+            "escalation_needed": payload.get("escalation_needed", False),
+            "suggested_next_action": payload.get(
+                "suggested_next_action", "Human review"
+            ),
+            "reasoning_summary": payload.get(
+                "reasoning_summary", "CrewAI analysis completed."
+            ),
             "knowledge_match": KnowledgeMatch(
                 article_id=payload.get("article_id", "KB-006"),
                 title=payload.get("article_title", "General support guidance"),
-                excerpt=payload.get("article_excerpt", "Review applicable support guidance."),
+                excerpt=payload.get(
+                    "article_excerpt", "Review applicable support guidance."
+                ),
                 score=article_score,
                 section=payload.get("category", "General Question"),
             ),
@@ -107,11 +124,20 @@ def run_crewai_workflow(ticket: Ticket, settings: Settings) -> Ticket:
             "quality_review": QualityReview(
                 status="Reviewed by CrewAI",
                 score=quality_score,
-                checks=["Tone", "Policy alignment", "Unsupported promises", "Next action"],
+                checks=[
+                    "Tone",
+                    "Policy alignment",
+                    "Unsupported promises",
+                    "Next action",
+                ],
                 notes=payload.get("quality_notes", "Review completed."),
             ),
             "agent_steps": steps,
             "updated_at": datetime.now(timezone.utc),
         }
     )
-
+    # Model copy bypasses validation; provider output must satisfy the API schema.
+    validated = Ticket.model_validate(result)
+    if validated.status == "Resolved":
+        validated.status = "In Review"
+    return validated
