@@ -65,6 +65,7 @@ jobs:
           node-version: '24'
       - run: python -m venv .venv
       - run: .venv/bin/pip install -r backend/requirements-production.txt
+      - run: .venv/bin/python tools/test_local_setup.py
       - run: npm ci
         working-directory: frontend
       - run: npx playwright install --with-deps chromium
