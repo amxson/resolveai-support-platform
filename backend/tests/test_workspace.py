@@ -400,3 +400,20 @@ def test_gmail_oauth_ingestion_duplicates_and_approved_send(application, monkeyp
     current = client.get(f"/tickets/{tid}").json()["ticket"]
     assert current["approved_version"] is None
     assert current["draft_version"] > data["version"]
+
+
+def test_worker_crash_budget_is_bounded(application, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_MODEL", "test-model")
+    client = account(application)
+    tid = ticket(client)
+    job_id = client.post(f"/tickets/{tid}/analyze").json()["job_id"]
+    with application.state.sessions.begin() as db:
+        job = db.get(AnalysisJob, job_id)
+        job.status, job.attempts, job.lease_until = "running", 3, 0
+
+    def must_not_run(*args):
+        pytest.fail("A crashed exhausted job must not call the provider again")
+
+    assert run_once(application.state.sessions, must_not_run)
+    assert client.get(f"/tickets/{tid}/analysis").json()[0]["status"] == "failed"

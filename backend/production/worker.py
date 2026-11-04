@@ -30,6 +30,27 @@ def run_once(sessions, processor=analyze):
         )
         if not candidate:
             return False
+        if candidate.attempts >= 3:
+            candidate.status = "failed"
+            candidate.error = "LeaseExpired"
+            db.execute(
+                update(Ticket)
+                .where(
+                    Ticket.id == candidate.ticket_id,
+                    Ticket.organization_id == candidate.organization_id,
+                )
+                .values(status="escalated")
+            )
+            db.add(
+                Audit(
+                    organization_id=candidate.organization_id,
+                    actor_id=candidate.actor_id,
+                    action="analysis.error",
+                    resource_id=candidate.ticket_id,
+                    details={"job_id": candidate.id, "error": "LeaseExpired"},
+                )
+            )
+            return True
         # CAS also protects SQLite local workers, where row locks aren't available.
         result = db.execute(
             update(AnalysisJob)

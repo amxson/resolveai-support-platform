@@ -48,6 +48,7 @@ export default function Workspace() {
     setTickets(queue); setMembers(team); setArticles(knowledge); setAudit(history); setCounts(analytics.by_status)
   }
   async function open(ticket: Ticket) {
+    setDelivery('')
     const detail = await api<{ ticket: Ticket; messages: Message[] }>(`/tickets/${ticket.id}`)
     setSelected(detail.ticket); setMessages(detail.messages); setDraft(detail.ticket.draft)
     setAnalysis(await api(`/tickets/${ticket.id}/analysis`))
