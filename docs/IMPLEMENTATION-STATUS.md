@@ -44,7 +44,9 @@ insufficient. The dedicated mailbox is connected; real inbox import and encrypte
 attachment ingestion were observed locally. The free Neon database was created
 and the private workspace snapshot imported with all row counts verified.
 Gemini live generation returned busy responses/timeouts, so it is not passed.
-Hosting rollout is in progress; no completed public deployment is claimed yet.
+The restricted free evaluation deployment is live on Vercel + Render + Neon.
+Eight hosted acceptance groups passed through the real frontend proxy; temporary
+test tenants were removed. See [release evidence and limitations](HOSTED-RELEASE.md).
 Docker is absent locally; its template has not been executed.
 
 ## Outstanding engineering gates

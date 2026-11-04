@@ -6,6 +6,8 @@ type Message = { id: string; kind: string; body: string }
 type Member = { id: string; email: string; role: string }
 type Article = { id: string; title: string; content: string; version: number }
 type Attachment = { id: string; filename: string; size: number }
+type AnalysisResult = { category?: string; priority?: string; sentiment?: string; explanation?: string; escalate?: boolean; citations?: { article_id: string; quote: string }[] }
+const publicSignup = import.meta.env.DEV || import.meta.env.VITE_PUBLIC_SIGNUP === 'true'
 const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '')
 
 export default function Workspace() {
@@ -21,7 +23,7 @@ export default function Workspace() {
   const [messages, setMessages] = useState<Message[]>([])
   const [draft, setDraft] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
-  const [analysis, setAnalysis] = useState<{ id: string; status: string; error: string | null; result: Record<string, unknown> }[]>([])
+  const [analysis, setAnalysis] = useState<{ id: string; status: string; error: string | null; result: AnalysisResult }[]>([])
   const [members, setMembers] = useState<Member[]>([])
   const [articles, setArticles] = useState<Article[]>([])
   const [audit, setAudit] = useState<{ id: string; action: string; resource_id: string; created_at: number }[]>([])
@@ -109,7 +111,7 @@ export default function Workspace() {
     <label>Invitation token (if invited)<input name="token" autoComplete="off" /></label>
     {error && <p role="alert">{error}</p>}
     <button className="primary-button" disabled={busy}>{busy ? 'Working…' : signup ? 'Create workspace' : 'Sign in / accept invitation'}</button>
-    <button type="button" className="secondary-button" onClick={() => setSignup(!signup)}>{signup ? 'Use existing account' : 'Create an account'}</button>
+    {publicSignup && <button type="button" className="secondary-button" onClick={() => setSignup(!signup)}>{signup ? 'Use existing account' : 'Create an account'}</button>}
   </form></main>
   return <div className="workspace app-shell">
     <aside className="sidebar"><div className="brand-row"><div><div className="brand-name">ResolveAI</div><small>{identity.organization}</small></div></div>
@@ -131,8 +133,14 @@ export default function Workspace() {
         {selected && <section className="panel workspace-form"><h2>{selected.subject}</h2>{messages.map(message => <article className="workspace-message" key={message.id}><small>{message.kind}</small><p>{message.body}</p></article>)}
           <form key={`${selected.id}:${selected.status}`} onSubmit={event => { const data = values(event); void run(async () => { await api(`/tickets/${selected.id}`, 'PATCH', { status: data.status, assignee_id: data.assignee_id || null }); await open(selected); await refresh() }) }}><label>Status<select name="status" defaultValue={selected.status}>{['open', 'in_review', 'escalated', 'resolved'].map(s => <option key={s}>{s}</option>)}</select></label><label>Assigned to<select name="assignee_id" defaultValue={selected.assignee_id || ''}><option value="">Unassigned</option>{members.map(m => <option key={m.id} value={m.id}>{m.email}</option>)}</select></label><button disabled={busy}>Save status and assignment</button></form>
           <form onSubmit={event => { const data = values(event); const form = event.currentTarget; void run(async () => { await api(`/tickets/${selected.id}/notes`, 'POST', data); form.reset(); await open(selected); await refresh() }) }}><label>Internal note<textarea name="body" required maxLength={20000} /></label><button disabled={busy}>Add note</button></form>
-          <div className="workspace-actions"><button disabled={busy} onClick={() => void run(async () => { await api(`/tickets/${selected.id}/analyze`, 'POST'); await open(selected) })}>Queue Gemini analysis</button><button disabled={busy} onClick={() => void run(() => open(selected))}>Refresh conversation and analysis</button></div>
-          {analysis.map(job => <details key={job.id}><summary>Analysis: {job.status}{job.error ? ` · ${job.error}` : ''}</summary><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(job.result, null, 2)}</pre></details>)}
+          <div className="workspace-actions"><button disabled={busy} onClick={() => void run(async () => { await api(`/tickets/${selected.id}/analyze`, 'POST'); await open(selected) })}>Analyze conversation</button><button disabled={busy} onClick={() => void run(() => open(selected))}>Refresh conversation and analysis</button></div>
+          {analysis.map(job => <details key={job.id}><summary>{job.status === 'completed' ? job.result.escalate ? 'Human review required' : 'Analysis ready for review' : job.status === 'failed' ? 'AI analysis unavailable' : job.status === 'conflict' ? 'Your newer draft was preserved' : 'Analysis in progress'}</summary>
+            {job.status === 'failed' && <p>The AI provider could not complete this request. Review the conversation manually or try again later.</p>}
+            {job.status === 'conflict' && <p>The conversation changed while analysis was running. Your saved draft has been kept.</p>}
+            {job.result.explanation && <p>{job.result.explanation}</p>}
+            {job.result.category && <p>Category: {job.result.category} · Priority: {job.result.priority} · Sentiment: {job.result.sentiment}</p>}
+            {job.result.citations?.map((citation, index) => <blockquote key={index}><p>{citation.quote}</p><cite>{articles.find(article => article.id === citation.article_id)?.title || 'Workspace policy'}</cite></blockquote>)}
+          </details>)}
           <section><h3>Attachments</h3>{attachments.map(file => <p key={file.id}><a href={`${base}/files/${file.id}`} download>{file.filename}</a> · {Math.ceil(file.size / 1024)} KB <button disabled={busy} onClick={() => void run(async () => { await api(`/files/${file.id}`, 'DELETE'); await open(selected) })}>Delete file</button></p>)}{uploadForm(`/tickets/${selected.id}/attachments`, () => open(selected), 'Attach PDF, text or image (up to 5 MB)', '.pdf,.txt,.md,.png,.jpg,.jpeg')}</section>
           <label>Response draft<textarea aria-label="Response draft" value={draft} onChange={e => setDraft(e.target.value)} maxLength={20000} /></label>
           <div className="workspace-actions"><button disabled={busy || !draft} onClick={() => void run(async () => { await api(`/tickets/${selected.id}/draft`, 'PUT', { body: draft, version: selected.draft_version }); await open(selected); await refresh() })}>Save draft</button>
