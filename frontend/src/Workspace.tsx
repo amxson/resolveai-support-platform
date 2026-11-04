@@ -13,6 +13,7 @@ export default function Workspace() {
   const [identity, setIdentity] = useState<{ email: string; role: string; organization: string } | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [restoring, setRestoring] = useState(true)
   const [signup, setSignup] = useState(false)
   const [view, setView] = useState('inbox')
   const [tickets, setTickets] = useState<Ticket[]>([])
@@ -29,7 +30,7 @@ export default function Workspace() {
   const [delivery, setDelivery] = useState('')
   const [counts, setCounts] = useState<Record<string, number>>({})
   async function api<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
-    const response = await fetch(`${base}${path}`, { method, credentials: 'include', signal: AbortSignal.timeout(15000),
+    const response = await fetch(`${base}${path}`, { method, credentials: 'include', signal: AbortSignal.timeout(90000),
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: body === undefined ? undefined : JSON.stringify(body) })
     if (!response.ok) {
       if (response.status === 401) setIdentity(null)
@@ -78,6 +79,8 @@ export default function Workspace() {
         await refresh()
       } catch (error) {
         if (active && !(error instanceof Error && error.message === 'Sign in required')) setError('Could not restore your workspace. Please sign in again.')
+      } finally {
+        if (active) setRestoring(false)
       }
     })()
     return () => { active = false }
@@ -87,6 +90,7 @@ export default function Workspace() {
     return Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>
   }
   const canAdmin = identity?.role === 'admin' || identity?.role === 'owner'
+  if (restoring) return <main className="workspace auth-page"><section className="panel workspace-form" role="status"><span className="eyebrow">ResolveAI · Workspace</span><h1>Connecting to your workspace…</h1><p>The free server may take about a minute to wake up on your first visit.</p></section></main>
   if (!identity) return <main className="workspace auth-page"><form className="panel workspace-form" onSubmit={event => {
     const data = values(event)
     void run(async () => {
