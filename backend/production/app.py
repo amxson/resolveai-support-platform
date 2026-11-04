@@ -6,9 +6,11 @@ import logging
 import os
 import secrets
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
+from alembic.script import ScriptDirectory
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
@@ -277,7 +279,14 @@ def create_app(database_url=None, secure_cookies=None, origins=None):
 
     @app.get("/ready")
     def ready(db=Depends(db_session, scope="function")):
-        db.execute(text("SELECT version_num FROM alembic_version"))
+        versions = set(db.scalars(text("SELECT version_num FROM alembic_version")))
+        expected = set(
+            ScriptDirectory(
+                str(Path(__file__).resolve().parent.parent / "migrations")
+            ).get_heads()
+        )
+        if versions != expected:
+            raise HTTPException(503, "Database migrations are required")
         db.execute(select(User.id).limit(1))
         return {"status": "ready"}
 
