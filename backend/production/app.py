@@ -242,26 +242,31 @@ def create_app(database_url=None, secure_cookies=None, origins=None):
 
     def auth_limit(request, email):
         # Shared SQL counters; commits separately so failed login cannot erase attempts.
-        key = digest(
-            f"{request.client.host if request.client else 'unknown'}:{email.lower()}"
-        )
+        host = request.client.host if request.client else "unknown"
         bucket = int(now() // 300)
-        key = f"{key}:{bucket}"
+        limited = False
         with sessions.begin() as db:
             if engine.dialect.name == "postgresql":
                 from sqlalchemy.dialects.postgresql import insert
             else:
                 from sqlalchemy.dialects.sqlite import insert
-            stmt = insert(RateWindow).values(
-                key=key, count=1, reset_at=(bucket + 1) * 300
-            )
-            stmt = stmt.on_conflict_do_update(
-                index_elements=[RateWindow.key], set_={"count": RateWindow.count + 1}
-            )
-            db.execute(stmt)
-            count = db.scalar(select(RateWindow.count).where(RateWindow.key == key))
+            for raw_key, limit in [
+                (f"host:{host}", 30),
+                (f"account:{host}:{email.lower()}", 10),
+            ]:
+                key = f"{digest(raw_key)}:{bucket}"
+                stmt = insert(RateWindow).values(
+                    key=key, count=1, reset_at=(bucket + 1) * 300
+                )
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=[RateWindow.key],
+                    set_={"count": RateWindow.count + 1},
+                )
+                db.execute(stmt)
+                count = db.scalar(select(RateWindow.count).where(RateWindow.key == key))
+                limited = limited or count > limit
             db.execute(delete(RateWindow).where(RateWindow.reset_at < now() - 300))
-        if count > 10:
+        if limited:
             raise HTTPException(
                 429, "Too many authentication attempts", headers={"Retry-After": "300"}
             )

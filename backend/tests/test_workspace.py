@@ -387,3 +387,16 @@ def test_gmail_oauth_ingestion_duplicates_and_approved_send(application, monkeyp
     data["version"] = initial_version + 2
     assert client.post(f"/tickets/{tid}/send", json=data).status_code == 502
     assert client.post(f"/tickets/{tid}/send", json=data).json()["status"] == "unknown"
+
+    def newer_message(token, method, path, **kwargs):
+        if path == "messages":
+            return {"messages": [{"id": "m3"}]}
+        return provider(
+            token, method, "messages/m2" if path == "messages/m3" else path, **kwargs
+        )
+
+    monkeypatch.setattr(channel, "gmail", newer_message)
+    assert client.post("/integrations/gmail/sync").json()["imported"] == 1
+    current = client.get(f"/tickets/{tid}").json()["ticket"]
+    assert current["approved_version"] is None
+    assert current["draft_version"] > data["version"]
