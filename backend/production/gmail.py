@@ -14,15 +14,18 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 
 from production.database import (
+    Audit,
     Mailbox,
     MailReceipt,
     MailThread,
+    Membership,
     Message,
     OAuthState,
     Outbound,
     Ticket,
     now,
 )
+from production.files import MAX_SIZE, clean_file, store_file
 
 SCOPES = "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send"
 
@@ -64,6 +67,13 @@ def token_request(data):
             },
         )
         if response.status_code != 200:
+            if (
+                response.status_code == 400
+                and response.json().get("error") == "invalid_grant"
+            ):
+                raise HTTPException(
+                    409, "Gmail grant expired or revoked; reconnect mailbox"
+                )
             raise HTTPException(502, "Google authorization failed; reconnect mailbox")
         return response.json()
 
@@ -99,6 +109,15 @@ def plain_text(part):
             "utf-8", errors="replace"
         )
     return "\n".join(plain_text(p) for p in part.get("parts", []))[:20000]
+
+
+def file_parts(part, depth=0):
+    if depth > 10:
+        return
+    if part.get("filename"):
+        yield part
+    for child in part.get("parts", []):
+        yield from file_parts(child, depth + 1)
 
 
 class SendInput(BaseModel):
@@ -192,6 +211,7 @@ def register(app, principal, db_session, find, admin, audit, digest, sessions):
                 .encrypt(tokens["refresh_token"].encode())
                 .decode(),
                 status="connected",
+                sync_actor_id=member.user_id,
             )
         )
         db.delete(record)
@@ -212,86 +232,7 @@ def register(app, principal, db_session, find, admin, audit, digest, sessions):
 
     @app.post("/integrations/gmail/sync")
     def sync(member=Depends(principal), db=Depends(db_session, scope="function")):
-        admin(member)
-        # Serialize mailbox ingestion so duplicate imports cannot create duplicate tickets.
-        mailbox = db.scalar(
-            select(Mailbox)
-            .where(Mailbox.organization_id == member.organization_id)
-            .with_for_update()
-        )
-        if not mailbox or mailbox.status != "connected":
-            raise HTTPException(409, "Connect Gmail first")
-        token = access_token(mailbox)
-        listing = gmail(
-            token, "GET", "messages", params={"labelIds": "INBOX", "maxResults": 50}
-        )
-        imported = 0
-        for item in listing.get("messages", []):
-            if db.get(MailReceipt, (member.organization_id, item["id"])):
-                continue
-            message = gmail(
-                token, "GET", "messages/" + item["id"], params={"format": "full"}
-            )
-            headers = {
-                h["name"].lower(): h["value"]
-                for h in message["payload"].get("headers", [])
-            }
-            sender = parseaddr(headers.get("from", ""))[1]
-            try:
-                sender = str(SendInput(version=0, recipient=sender).recipient)
-            except ValueError:
-                continue
-            thread = db.get(MailThread, (member.organization_id, message["threadId"]))
-            if not thread:
-                ticket = Ticket(
-                    organization_id=member.organization_id,
-                    subject=headers.get("subject", "(No subject)")[:200],
-                    customer_email=sender,
-                )
-                db.add(ticket)
-                db.flush()
-                thread = MailThread(
-                    organization_id=member.organization_id,
-                    thread_id=message["threadId"],
-                    ticket_id=ticket.id,
-                    reply_message_id=headers.get("message-id", "")[:1000],
-                )
-                db.add(thread)
-            else:
-                ticket = db.scalar(
-                    select(Ticket)
-                    .where(
-                        Ticket.id == thread.ticket_id,
-                        Ticket.organization_id == member.organization_id,
-                    )
-                    .with_for_update(key_share=True)
-                )
-                ticket.draft_version += 1
-                ticket.approved_version = None
-                ticket.status = "open"
-            body = (
-                plain_text(message["payload"])
-                or "[No plain-text part; inspect original mailbox]"
-            )
-            db.add(
-                Message(
-                    organization_id=member.organization_id,
-                    ticket_id=thread.ticket_id,
-                    kind="incoming",
-                    body=body,
-                )
-            )
-            db.add(
-                MailReceipt(
-                    organization_id=member.organization_id, provider_id=item["id"]
-                )
-            )
-            imported += 1
-        audit(db, member, "gmail.synced", member.organization_id, imported=imported)
-        return {
-            "imported": imported,
-            "scope": "Latest 50 inbox messages; full history and attachments pending",
-        }
+        return sync_mailbox(db, member, audit)
 
     @app.post("/tickets/{ticket_id}/send")
     def send(
@@ -390,3 +331,196 @@ def register(app, principal, db_session, find, admin, audit, digest, sessions):
             "provider_id": result["id"],
             "delivery_verified": False,
         }
+
+
+def sync_mailbox(db, member, audit):
+    if member.role not in {"owner", "admin"}:
+        raise HTTPException(403, "Administrator permission required")
+    # Serialize mailbox ingestion so duplicate imports cannot create duplicate tickets.
+    mailbox = db.scalar(
+        select(Mailbox)
+        .where(Mailbox.organization_id == member.organization_id)
+        .with_for_update()
+    )
+    if not mailbox or mailbox.status != "connected":
+        raise HTTPException(409, "Connect Gmail first")
+    token = access_token(mailbox)
+    if not mailbox.sync_cursor:
+        mailbox.scan_started = now()
+    params = {"labelIds": "INBOX", "maxResults": 10}
+    if mailbox.sync_cursor:
+        params["pageToken"] = mailbox.sync_cursor
+    if mailbox.synced_after:
+        params["q"] = f"after:{max(0, int(mailbox.synced_after) - 600)}"
+    listing = gmail(token, "GET", "messages", params=params)
+    imported = 0
+    for item in listing.get("messages", []):
+        if db.get(MailReceipt, (member.organization_id, item["id"])):
+            continue
+        message = gmail(
+            token, "GET", "messages/" + item["id"], params={"format": "full"}
+        )
+        headers = {
+            h["name"].lower(): h["value"] for h in message["payload"].get("headers", [])
+        }
+        sender = parseaddr(headers.get("from", ""))[1]
+        try:
+            sender = str(SendInput(version=0, recipient=sender).recipient)
+        except ValueError:
+            continue
+        thread = db.get(MailThread, (member.organization_id, message["threadId"]))
+        if not thread:
+            ticket = Ticket(
+                organization_id=member.organization_id,
+                subject=headers.get("subject", "(No subject)")[:200],
+                customer_email=sender,
+            )
+            db.add(ticket)
+            db.flush()
+            thread = MailThread(
+                organization_id=member.organization_id,
+                thread_id=message["threadId"],
+                ticket_id=ticket.id,
+                reply_message_id=headers.get("message-id", "")[:1000],
+            )
+            db.add(thread)
+        else:
+            ticket = db.scalar(
+                select(Ticket)
+                .where(
+                    Ticket.id == thread.ticket_id,
+                    Ticket.organization_id == member.organization_id,
+                )
+                .with_for_update(key_share=True)
+            )
+            ticket.draft_version += 1
+            ticket.approved_version = None
+            ticket.status = "open"
+        body = (
+            plain_text(message["payload"])
+            or "[No plain-text part; inspect original mailbox]"
+        )
+        db.add(
+            Message(
+                organization_id=member.organization_id,
+                ticket_id=thread.ticket_id,
+                kind="incoming",
+                body=body,
+            )
+        )
+        db.add(
+            MailReceipt(organization_id=member.organization_id, provider_id=item["id"])
+        )
+        for index, part in enumerate(file_parts(message["payload"])):
+            try:
+                info = part.get("body", {})
+                if index >= 10 or info.get("size", 0) > MAX_SIZE:
+                    raise HTTPException(422, "Attachment exceeds import limits")
+                encoded = info.get("data", "")
+                if info.get("attachmentId"):
+                    encoded = gmail(
+                        token,
+                        "GET",
+                        "messages/"
+                        + item["id"]
+                        + "/attachments/"
+                        + info["attachmentId"],
+                    ).get("data", "")
+                if len(encoded) > (MAX_SIZE * 4 // 3 + 8):
+                    raise HTTPException(422, "Attachment exceeds size limit")
+                data = base64.b64decode(
+                    encoded + "=" * (-len(encoded) % 4),
+                    altchars=b"-_",
+                    validate=True,
+                )
+                filename, content_type = clean_file(part["filename"], data)
+                store_file(
+                    db,
+                    member,
+                    filename,
+                    content_type,
+                    data,
+                    ticket_id=thread.ticket_id,
+                )
+            except (ValueError, HTTPException) as error:
+                # Keep an explicit record of a rejected attachment; never execute it.
+                if isinstance(error, HTTPException) and error.status_code == 503:
+                    raise
+                db.add(
+                    Message(
+                        organization_id=member.organization_id,
+                        ticket_id=thread.ticket_id,
+                        kind="internal",
+                        body="An incoming attachment could not be imported within allowed file types/size limits. Inspect the original mailbox.",
+                    )
+                )
+        imported += 1
+    mailbox.sync_cursor = listing.get("nextPageToken")
+    if not mailbox.sync_cursor:
+        mailbox.synced_after = mailbox.scan_started
+    mailbox.next_sync_at = now() + (2 if mailbox.sync_cursor else 60)
+    mailbox.sync_failures = 0
+    mailbox.sync_error = None
+    audit(db, member, "gmail.synced", member.organization_id, imported=imported)
+    return {
+        "imported": imported,
+        "more_pages": bool(mailbox.sync_cursor),
+    }
+
+
+def sync_due(sessions):
+    org_id = None
+    try:
+        with sessions.begin() as db:
+            mailbox = db.scalar(
+                select(Mailbox)
+                .where(Mailbox.status == "connected", Mailbox.next_sync_at <= now())
+                .order_by(Mailbox.next_sync_at)
+                .with_for_update(skip_locked=True)
+                .limit(1)
+            )
+            if not mailbox:
+                return False
+            org_id = mailbox.organization_id
+            member = (
+                db.get(Membership, (org_id, mailbox.sync_actor_id))
+                if mailbox.sync_actor_id
+                else None
+            )
+            if not member or member.role not in {"owner", "admin"}:
+                member = db.scalar(
+                    select(Membership).where(
+                        Membership.organization_id == org_id, Membership.role == "owner"
+                    )
+                )
+            if not member:
+                mailbox.status = "disconnected"
+                mailbox.refresh_token = ""
+                return True
+
+            def record(db, actor, action, resource, **details):
+                db.add(
+                    Audit(
+                        organization_id=actor.organization_id,
+                        actor_id=actor.user_id,
+                        action=action,
+                        resource_id=resource,
+                        details=details,
+                    )
+                )
+
+            sync_mailbox(db, member, record)
+        return True
+    except Exception as error:
+        if org_id:
+            with sessions.begin() as db:
+                mailbox = db.get(Mailbox, org_id)
+                if mailbox:
+                    mailbox.sync_failures += 1
+                    mailbox.sync_error = type(error).__name__
+                    mailbox.next_sync_at = now() + min(
+                        900, 30 * 2 ** min(mailbox.sync_failures, 5)
+                    )
+                    if isinstance(error, HTTPException) and error.status_code == 409:
+                        mailbox.status = "reconnect_required"
+        return False

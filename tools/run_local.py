@@ -37,6 +37,7 @@ def main():
                 "GOOGLE_CLIENT_SECRET",
                 "GOOGLE_REDIRECT_URI",
                 "OAUTH_ENCRYPTION_KEY",
+                "FILE_ENCRYPTION_KEY",
             }
         }
         frontend_env.update(

@@ -1,10 +1,6 @@
 """Exercise API security boundaries using a real migrated database."""
 
-import os
-
 import pytest
-from alembic import command
-from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -13,20 +9,6 @@ from production.database import AnalysisJob, Session, now
 from production.worker import run_once
 
 PASSWORD = "a-long-test-password-42"
-
-
-@pytest.fixture
-def application(tmp_path, monkeypatch):
-    url = os.environ.get("TEST_DATABASE_URL", f"sqlite:///{tmp_path / 'workspace.db'}")
-    monkeypatch.setenv("DATABASE_URL", url)
-    monkeypatch.setenv("APP_ENV", "test")
-    config = Config("alembic.ini")
-    command.upgrade(config, "head")
-    app = create_app(url, secure_cookies=False)
-    yield app
-    app.state.engine.dispose()
-    if os.environ.get("TEST_DATABASE_URL"):
-        command.downgrade(config, "base")
 
 
 def account(app, email="owner@example.com"):
@@ -235,6 +217,19 @@ def test_production_configuration_fails_closed(monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
     with pytest.raises(RuntimeError):
         create_app("sqlite://", secure_cookies=False)
+
+
+def test_existing_session_can_restore_csrf_without_password(application):
+    client = account(application)
+    original = client.headers.pop("X-CSRF-Token")
+    restored = client.get("/auth/session")
+    assert restored.status_code == 200
+    assert restored.json()["csrf_token"] == original
+    assert "resolveai_session" not in restored.text
+    assert client.get("/auth/session").json()["csrf_token"] == original
+    client.headers["X-CSRF-Token"] = restored.json()["csrf_token"]
+    assert ticket(client)
+    assert TestClient(application).get("/auth/session").status_code == 401
 
 
 def test_analysis_jobs_failure_retries_and_human_edit_protection(

@@ -16,7 +16,7 @@ python -m uvicorn production.app:create_app --factory --host 127.0.0.1 --port 80
 For local development `DATABASE_URL=sqlite:///workspace.db` works. Production
 requires PostgreSQL (`postgresql+psycopg://...`), `APP_ENV=production`, HTTPS
 `APP_ORIGINS` and secure cookies. Configure database TLS and a trusted proxy.
-Schema changes are separate release commands, not automatic API startup work.
+The release entrypoint runs Alembic before starting the API; standalone API startup never creates tables.
 Public signup is closed in production unless `ALLOW_SIGNUP=true` explicitly.
 Email verification is still required before public registration can be recommended.
 
@@ -24,8 +24,7 @@ In `frontend`, set `VITE_APP_MODE=workspace`,
 `VITE_API_BASE_URL=http://localhost:8000`, then `npm ci` and `npm run dev`.
 Use consistent hostnames. For hosted use, choose same-site frontend/API domains
 or a same-origin reverse proxy; cross-site Vercel/Render defaults will not work
-with the SameSite=Lax cookies. Frontend reload requires login again to obtain
-a new in-memory CSRF token; no session secrets enter browser storage.
+with the SameSite=Lax cookies. Frontend reload restores the existing session and its CSRF token; no session secrets enter browser storage.
 
 ## Implemented security and behavior
 
@@ -61,13 +60,12 @@ to schema-compatible versions; do not downgrade customer data as a shortcut.
 
 ## Pending release gates
 
-Gmail/Gemini live acceptance, complete channel synchronization, document
-parsing/embeddings/vector retrieval, scheduled mailbox workers, attachments,
+Gmail send/delivery and Gemini live acceptance, embeddings/vector retrieval,
 retention/deletion, AI evaluations, password recovery, workspace switching,
-monitoring/alerts, restore drills and load tests remain. No provider delivery,
-production deployment or customer adoption is claimed.
+monitoring/alerts, restore drills and load tests remain. No provider delivery
+or customer adoption is claimed. See IMPLEMENTATION-STATUS.md for deployment evidence.
 
-Gmail OAuth, encrypted refresh tokens, bounded manual inbox ingestion and
+Gmail OAuth, encrypted refresh tokens, resumable paginated inbox ingestion and
 version-approved send attempts are implemented; see [integration limits and setup](INTEGRATIONS.md).
 Gemini execution and durable analysis workers are implemented with provider-double
 tests. These tests are not live-provider acceptance or AI quality evaluations.

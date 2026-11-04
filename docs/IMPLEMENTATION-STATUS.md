@@ -11,8 +11,13 @@
 - Structured Gemini adapter with citations, bounded lexical retrieval, usage and
   latency records; durable job leases, retries and failure escalation.
 - Gmail OAuth, encrypted refresh credentials and key rotation support, bounded
-  manual plain-text inbox import, thread/dedup handling and approved-version sends.
+  resumable paginated inbox import, scheduled polling/backoff, thread/dedup handling
+  and approved-version sends.
 - No automatic retry of uncertain sends; new incoming messages invalidate approval.
+- Encrypted tenant-scoped file upload/download/deletion and bounded PDF/TXT/Markdown
+  knowledge ingestion, plus safe supported Gmail attachments.
+- Session restoration across page reload, a same-origin Vercel API proxy and a
+  free Render release entrypoint with an embedded worker.
 - Docker/Caddy/PostgreSQL composition template and setup/operational documentation.
 
 ## Verified by automated tests
@@ -20,7 +25,8 @@
 The backend suite covers tenant attacks, role denials, expired sessions, CSRF,
 invitation replay, revocation, restart persistence, optimistic draft conflicts,
 provider/citation failures, worker crash limits, OAuth state isolation,
-duplicate import, approved sending and uncertain-send protection. Provider tests
+duplicate import, paginated restart recovery, revoked grants, encrypted file isolation,
+approved sending and uncertain-send protection. Provider tests
 use controlled doubles; they do not contact Google or send actual mail.
 
 Browser acceptance covers signup → ticket → internal note → saved draft → approval
@@ -34,15 +40,18 @@ Configure the dedicated Gmail OAuth client/consent and Gemini server credentials
 privately using `.env.workspace.example`. No secret should be pasted into chat.
 Authorize specific test sends only after inspecting the intended recipient and
 draft. Verify provider IDs and actual inbox delivery; Gmail acceptance alone is
-insufficient. No real provider execution, real mailbox connection or live
-production deployment has been verified. Docker is absent locally; its template
-has not been executed. The existing public demo has not been replaced.
+insufficient. The dedicated mailbox is connected; real inbox import and encrypted
+attachment ingestion were observed locally. The free Neon database was created
+and the private workspace snapshot imported with all row counts verified.
+Gemini live generation returned busy responses/timeouts, so it is not passed.
+Hosting rollout is in progress; no completed public deployment is claimed yet.
+Docker is absent locally; its template has not been executed.
 
 ## Outstanding engineering gates
 
 This change is **not the complete production product**. Remaining work includes
-full/paginated mailbox history, scheduled sync and recovery, attachment storage,
-document upload/parsing and embedding/vector retrieval, document permissions,
+complete Gmail change-history/push recovery and embedding/vector retrieval,
+finer document permissions,
 retention/deletion, verified email/password recovery, workspace switching/settings,
 formal AI evaluations, cost calculation, distributed usage limits, send-worker
 reconciliation, delivery/bounce tracking, monitoring/alerts, secret-scanning CI,

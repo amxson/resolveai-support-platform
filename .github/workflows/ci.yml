@@ -32,8 +32,8 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - run: pip install -r requirements-production.txt ruff pip-audit
-      - run: ruff check production migrations tests/test_workspace.py tests/test_grounded_ai.py
-      - run: ruff format --check production migrations tests/test_workspace.py tests/test_grounded_ai.py
+      - run: ruff check production migrations tests/conftest.py tests/test_workspace.py tests/test_grounded_ai.py tests/test_files.py tests/test_mailbox_sync.py
+      - run: ruff format --check production migrations tests/conftest.py tests/test_workspace.py tests/test_grounded_ai.py tests/test_files.py tests/test_mailbox_sync.py
       - run: python -m pytest -q
       - run: pip-audit -r requirements-production.txt
 

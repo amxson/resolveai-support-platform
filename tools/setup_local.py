@@ -79,6 +79,7 @@ def main():
         "GOOGLE_CLIENT_SECRET": client["client_secret"],
         "GOOGLE_REDIRECT_URI": redirect,
         "OAUTH_ENCRYPTION_KEY": Fernet.generate_key().decode(),
+        "FILE_ENCRYPTION_KEY": Fernet.generate_key().decode(),
         "ENABLE_EMAIL_SEND": "false",
         "ALLOW_SIGNUP": "true",
     }

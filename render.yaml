@@ -4,16 +4,36 @@ services:
     runtime: python
     plan: free
     rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /health
+    buildCommand: pip install -r requirements-production.txt
+    startCommand: python -m production.release
+    healthCheckPath: /ready
     envVars:
-      - key: DEMO_MODE
+      - key: APP_ENV
+        value: production
+      - key: RUN_EMBEDDED_WORKER
         value: true
-      - key: FALLBACK_ON_AI_ERROR
-        value: true
+      - key: ENABLE_EMAIL_SEND
+        value: false
+      - key: ALLOW_SIGNUP
+        value: false
       - key: PYTHON_VERSION
         value: 3.11.9
-      - key: CORS_ORIGINS
-        value: https://resolveai-support-platform.vercel.app,https://resolveai-support-prototype.amarasfaw7.chatgpt.site
+      - key: APP_ORIGINS
+        value: https://resolveai-support-platform.vercel.app
+      - key: DATABASE_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        value: https://resolveai-support-platform.vercel.app/api/integrations/gmail/callback
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        sync: false
+      - key: OAUTH_ENCRYPTION_KEY
+        sync: false
+      - key: FILE_ENCRYPTION_KEY
+        sync: false
 

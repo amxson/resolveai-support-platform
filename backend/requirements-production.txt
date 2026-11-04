@@ -5,3 +5,4 @@ alembic>=1.16,<2
 psycopg[binary]>=3.2,<4
 argon2-cffi>=25.1,<26
 cryptography>=50,<51
+pypdf>=6,<8

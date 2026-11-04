@@ -1,7 +1,9 @@
 # Gmail + Gemini acceptance setup
 
-These integrations are implemented and tested with controlled HTTP/provider
-responses. No live mailbox or Gemini call has been verified in this change.
+The dedicated Gmail mailbox has connected and real inbox ingestion has been verified.
+Provider-double tests cover sends, failures and approval checks. Gemini generation
+has returned provider busy responses/timeouts; successful live generation and actual
+recipient delivery remain unverified.
 Use only a dedicated test mailbox until the release gates are closed.
 
 ## Gemini
@@ -19,7 +21,7 @@ and exact citation IDs/quotes, then routes to human review. No matching policy
 means escalation without a model call. This baseline is not vector retrieval,
 calibrated confidence, or proof that a generated claim is entailed by its quote.
 Usage metadata and latency are recorded; cost is null until a verified pricing
-configuration is added. Document upload, embeddings and formal evaluations remain.
+configuration is added. PDF/TXT/Markdown upload is implemented; embeddings and formal evaluations remain.
 
 ## Gmail
 
@@ -38,11 +40,14 @@ configuration is added. Document upload, embeddings and formal evaluations remai
 4. Sign into the workspace and use Integrations → Connect Gmail. The callback
    binds OAuth state to the session's user and organization. Return to the
    workspace after consent; refresh and sign in if needed.
-5. Import inbox. This first channel slice imports the **latest 50 inbox messages**,
-   groups provider threads, and deduplicates provider IDs. Text-only extraction
-   is deliberate; HTML-only messages are marked for original-mailbox inspection.
-   Attachments, full-history pagination, scheduled polling and push history
-   recovery are still release blockers for a complete channel.
+5. Import inbox. Each bounded batch imports up to 10 messages, saves its next-page
+   cursor, groups provider threads and deduplicates provider IDs. The worker
+   resumes pages after restarts, then polls every 60 seconds with an overlap
+   window. Revoked grants require reconnection; other failures back off.
+   PDF/TXT/Markdown/PNG/JPEG attachments are encrypted in database storage
+   (5 MB each, 10 per message, 50 MB per workspace). Unsupported files are
+   recorded for inspection in Gmail. HTML-only messages need original-mailbox
+   review. This is inbox polling, not complete Gmail history/push synchronization.
 6. Sending defaults closed (`ENABLE_EMAIL_SEND=false`). Only after explicit
    authorization for named test recipients, enable it in the test environment.
    Edit/save/approve a draft, type its recipient, then use the send button.

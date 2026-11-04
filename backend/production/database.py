@@ -148,6 +148,15 @@ class Mailbox(Base):
     email: Mapped[str] = mapped_column(String(254))
     refresh_token: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(24), default="connected")
+    sync_actor_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )
+    sync_cursor: Mapped[str | None] = mapped_column(Text, nullable=True)
+    synced_after: Mapped[float] = mapped_column(default=0, server_default="0")
+    scan_started: Mapped[float] = mapped_column(default=0, server_default="0")
+    next_sync_at: Mapped[float] = mapped_column(default=0, server_default="0")
+    sync_failures: Mapped[int] = mapped_column(default=0, server_default="0")
+    sync_error: Mapped[str | None] = mapped_column(String(80), nullable=True)
 
 
 class OAuthState(Base):
@@ -187,3 +196,22 @@ class Outbound(Base):
     draft_version: Mapped[int]
     status: Mapped[str] = mapped_column(String(20), default="sending")
     provider_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+
+class StoredFile(Base):
+    __tablename__ = "stored_files"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.id"), index=True
+    )
+    ticket_id: Mapped[str | None] = mapped_column(
+        ForeignKey("support_tickets.id"), nullable=True
+    )
+    article_id: Mapped[str | None] = mapped_column(
+        ForeignKey("articles.id"), nullable=True
+    )
+    filename: Mapped[str] = mapped_column(String(200))
+    content_type: Mapped[str] = mapped_column(String(100))
+    size: Mapped[int]
+    encrypted_data: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[float] = mapped_column(default=now)

@@ -7,6 +7,7 @@ import os
 import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
+from threading import Event, Thread
 from typing import Literal
 from uuid import uuid4
 
@@ -31,6 +32,7 @@ from production.database import (
     Organization,
     RateWindow,
     Session,
+    StoredFile,
     Ticket,
     User,
     now,
@@ -122,8 +124,20 @@ def create_app(database_url=None, secure_cookies=None, origins=None):
 
     @asynccontextmanager
     async def lifespan(app):
-        yield
-        engine.dispose()
+        stop = Event()
+        worker = None
+        if os.environ.get("RUN_EMBEDDED_WORKER") == "true":
+            from production.worker import run_forever
+
+            worker = Thread(target=run_forever, args=(sessions, stop), daemon=True)
+            worker.start()
+        try:
+            yield
+        finally:
+            stop.set()
+            if worker:
+                worker.join(timeout=50)
+            engine.dispose()
 
     app = FastAPI(title="ResolveAI Workspace API", lifespan=lifespan)
     app.state.engine = engine
@@ -133,7 +147,7 @@ def create_app(database_url=None, secure_cookies=None, origins=None):
         allow_origins=allowed,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-        allow_headers=["Content-Type", "X-CSRF-Token"],
+        allow_headers=["Content-Type", "X-CSRF-Token", "X-Filename"],
     )
 
     @app.middleware("http")
@@ -221,7 +235,8 @@ def create_app(database_url=None, secure_cookies=None, origins=None):
         return obj
 
     def issue_session(db, response, user, org):
-        token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
+        token = secrets.token_urlsafe(32)
+        csrf = digest("resolveai-csrf:" + token)
         db.add(
             Session(
                 token_hash=digest(token),
@@ -348,6 +363,25 @@ def create_app(database_url=None, secure_cookies=None, origins=None):
     @app.get("/auth/me")
     def me(member=Depends(principal), db=Depends(db_session, scope="function")):
         return {
+            "email": db.get(User, member.user_id).email,
+            "role": member.role,
+            "organization": db.get(Organization, member.organization_id).name,
+        }
+
+    @app.get("/auth/session")
+    def restore_session(
+        request: Request,
+        member=Depends(principal),
+        db=Depends(db_session, scope="function"),
+    ):
+        # Same-origin/CORS-protected recovery without exposing the HttpOnly cookie.
+        # Derivation is stable across tabs and never uses predictable user fields.
+        token = request.cookies["resolveai_session"]
+        csrf = digest("resolveai-csrf:" + token)
+        session = db.get(Session, digest(token))
+        session.csrf_hash = digest(csrf)
+        return {
+            "csrf_token": csrf,
             "email": db.get(User, member.user_id).email,
             "role": member.role,
             "organization": db.get(Organization, member.organization_id).name,
@@ -692,7 +726,14 @@ def create_app(database_url=None, secure_cookies=None, origins=None):
         db=Depends(db_session, scope="function"),
     ):
         admin(member)
-        db.delete(find(db, Article, article_id, member, True))
+        article = find(db, Article, article_id, member, True)
+        db.execute(
+            delete(StoredFile).where(
+                StoredFile.organization_id == member.organization_id,
+                StoredFile.article_id == article_id,
+            )
+        )
+        db.delete(article)
         audit(db, member, "article.deleted", article_id)
 
     @app.get("/audit")
@@ -773,4 +814,7 @@ def create_app(database_url=None, secure_cookies=None, origins=None):
     from production.gmail import register
 
     register(app, principal, db_session, find, admin, audit, digest, sessions)
+    from production.files import register as register_files
+
+    register_files(app, principal, db_session, find, admin, audit)
     return app

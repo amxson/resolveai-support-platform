@@ -1,7 +1,8 @@
 """Durable leased analysis jobs. Start with python -m production.worker."""
 
+import logging
 import os
-import time
+from threading import Event
 from uuid import uuid4
 
 from sqlalchemy import create_engine, or_, select, update
@@ -164,9 +165,22 @@ def run_once(sessions, processor=analyze):
     return True
 
 
+def run_forever(sessions, stop=None):
+    from production.gmail import sync_due
+
+    stop = stop or Event()
+    while not stop.is_set():
+        try:
+            run_once(sessions)
+            if not stop.is_set():
+                sync_due(sessions)
+        except Exception as error:
+            logging.getLogger("resolveai.worker").error(
+                "worker_tick_failed", extra={"error_type": type(error).__name__}
+            )
+        stop.wait(2)
+
+
 if __name__ == "__main__":
     engine = create_engine(os.environ["DATABASE_URL"], pool_pre_ping=True)
-    sessions = sessionmaker(engine, expire_on_commit=False)
-    while True:
-        if not run_once(sessions):
-            time.sleep(2)
+    run_forever(sessionmaker(engine, expire_on_commit=False))

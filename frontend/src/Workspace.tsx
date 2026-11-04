@@ -1,10 +1,11 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import './workspace.css'
 
 type Ticket = { id: string; subject: string; customer_email: string; status: string; draft: string; draft_version: number; approved_version: number | null; assignee_id: string | null }
 type Message = { id: string; kind: string; body: string }
 type Member = { id: string; email: string; role: string }
 type Article = { id: string; title: string; content: string; version: number }
+type Attachment = { id: string; filename: string; size: number }
 const base = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '')
 
 export default function Workspace() {
@@ -18,6 +19,7 @@ export default function Workspace() {
   const [selected, setSelected] = useState<Ticket | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [draft, setDraft] = useState('')
+  const [attachments, setAttachments] = useState<Attachment[]>([])
   const [analysis, setAnalysis] = useState<{ id: string; status: string; error: string | null; result: Record<string, unknown> }[]>([])
   const [members, setMembers] = useState<Member[]>([])
   const [articles, setArticles] = useState<Article[]>([])
@@ -40,6 +42,17 @@ export default function Workspace() {
     setBusy(true); setError('')
     try { await action() } catch (e) { setError(e instanceof Error ? e.message : 'Request failed') } finally { setBusy(false) }
   }
+  async function uploadFile(path: string, file: File) {
+    if (file.size > 5 * 1024 * 1024) throw new Error('Choose a file no larger than 5 MB')
+    const response = await fetch(`${base}${path}`, { method: 'POST', credentials: 'include', signal: AbortSignal.timeout(30000),
+      headers: { 'Content-Type': 'application/octet-stream', 'X-CSRF-Token': csrf, 'X-Filename': encodeURIComponent(file.name) }, body: file })
+    if (!response.ok) { const result = await response.json(); throw new Error(typeof result.detail === 'string' ? result.detail : 'Upload failed') }
+  }
+  function uploadForm(path: string, after: () => Promise<void>, label: string, accept: string) {
+    return <form onSubmit={event => { event.preventDefault(); const form = event.currentTarget; const file = new FormData(form).get('file'); if (file instanceof File) void run(async () => { await uploadFile(path, file); form.reset(); await after() }) }}>
+      <label>{label}<input type="file" name="file" accept={accept} required /></label><button disabled={busy}>Upload file</button>
+    </form>
+  }
   async function refresh() {
     const [queue, team, knowledge, history, analytics] = await Promise.all([
       api<Ticket[]>('/tickets'), api<Member[]>('/team'), api<Article[]>('/knowledge'),
@@ -52,7 +65,23 @@ export default function Workspace() {
     const detail = await api<{ ticket: Ticket; messages: Message[] }>(`/tickets/${ticket.id}`)
     setSelected(detail.ticket); setMessages(detail.messages); setDraft(detail.ticket.draft)
     setAnalysis(await api(`/tickets/${ticket.id}/analysis`))
+    setAttachments(await api(`/tickets/${ticket.id}/attachments`))
   }
+  useEffect(() => {
+    let active = true
+    void (async () => {
+      try {
+        const session = await api<{ csrf_token: string; email: string; role: string; organization: string }>('/auth/session')
+        if (!active) return
+        setCsrf(session.csrf_token)
+        setIdentity({ email: session.email, role: session.role, organization: session.organization })
+        await refresh()
+      } catch (error) {
+        if (active && !(error instanceof Error && error.message === 'Sign in required')) setError('Could not restore your workspace. Please sign in again.')
+      }
+    })()
+    return () => { active = false }
+  }, [])
   function values(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     return Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>
@@ -100,6 +129,7 @@ export default function Workspace() {
           <form onSubmit={event => { const data = values(event); const form = event.currentTarget; void run(async () => { await api(`/tickets/${selected.id}/notes`, 'POST', data); form.reset(); await open(selected); await refresh() }) }}><label>Internal note<textarea name="body" required maxLength={20000} /></label><button disabled={busy}>Add note</button></form>
           <div className="workspace-actions"><button disabled={busy} onClick={() => void run(async () => { await api(`/tickets/${selected.id}/analyze`, 'POST'); await open(selected) })}>Queue Gemini analysis</button><button disabled={busy} onClick={() => void run(() => open(selected))}>Refresh conversation and analysis</button></div>
           {analysis.map(job => <details key={job.id}><summary>Analysis: {job.status}{job.error ? ` · ${job.error}` : ''}</summary><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(job.result, null, 2)}</pre></details>)}
+          <section><h3>Attachments</h3>{attachments.map(file => <p key={file.id}><a href={`${base}/files/${file.id}`} download>{file.filename}</a> · {Math.ceil(file.size / 1024)} KB <button disabled={busy} onClick={() => void run(async () => { await api(`/files/${file.id}`, 'DELETE'); await open(selected) })}>Delete file</button></p>)}{uploadForm(`/tickets/${selected.id}/attachments`, () => open(selected), 'Attach PDF, text or image (up to 5 MB)', '.pdf,.txt,.md,.png,.jpg,.jpeg')}</section>
           <label>Response draft<textarea aria-label="Response draft" value={draft} onChange={e => setDraft(e.target.value)} maxLength={20000} /></label>
           <div className="workspace-actions"><button disabled={busy || !draft} onClick={() => void run(async () => { await api(`/tickets/${selected.id}/draft`, 'PUT', { body: draft, version: selected.draft_version }); await open(selected); await refresh() })}>Save draft</button>
           <button disabled={busy || !selected.draft || draft !== selected.draft} onClick={() => void run(async () => { await api(`/tickets/${selected.id}/approve`, 'POST', { version: selected.draft_version }); await open(selected); await refresh() })}>Approve saved draft</button>
@@ -108,10 +138,10 @@ export default function Workspace() {
           {selected.approved_version !== null && <form onSubmit={event => { const data = values(event); void run(async () => { const result = await api<{ status: string; provider_id?: string }>(`/tickets/${selected.id}/send`, 'POST', { version: selected.approved_version, recipient: data.recipient }); setDelivery(`${result.status}${result.provider_id ? ` · provider reference ${result.provider_id}` : ''}`); await refresh() }) }}><label>Confirm recipient before sending<input name="recipient" type="email" placeholder={selected.customer_email} required /></label><button disabled={busy}>Send approved response through Gmail</button>{delivery && <p role="status">{delivery}. Provider acceptance is not proof of recipient delivery.</p>}</form>}
         </section>}
       </>}
-      {view === 'knowledge' && <section className="panel workspace-form"><h2>Workspace knowledge</h2>{canAdmin && <form onSubmit={event => { const data = values(event); const form = event.currentTarget; void run(async () => { await api('/knowledge', 'POST', data); form.reset(); await refresh() }) }}><label>Title<input name="title" minLength={2} maxLength={200} required /></label><label>Policy text<textarea name="content" maxLength={100000} required /></label><button disabled={busy}>Add article</button></form>}{articles.map(article => <article key={article.id}><h3>{article.title} · v{article.version}</h3><p>{article.content}</p>{canAdmin && <button disabled={busy} onClick={() => void run(async () => { await api(`/knowledge/${article.id}`, 'DELETE'); await refresh() })}>Delete article</button>}</article>)}</section>}
+      {view === 'knowledge' && <section className="panel workspace-form"><h2>Workspace knowledge</h2>{canAdmin && uploadForm('/knowledge/documents', refresh, 'Import a PDF, TXT or Markdown policy (up to 5 MB)', '.pdf,.txt,.md')}{canAdmin && <form onSubmit={event => { const data = values(event); const form = event.currentTarget; void run(async () => { await api('/knowledge', 'POST', data); form.reset(); await refresh() }) }}><label>Title<input name="title" minLength={2} maxLength={200} required /></label><label>Policy text<textarea name="content" maxLength={100000} required /></label><button disabled={busy}>Add article</button></form>}{articles.map(article => <article key={article.id}><h3>{article.title} · v{article.version}</h3><p>{article.content}</p>{canAdmin && <button disabled={busy} onClick={() => void run(async () => { await api(`/knowledge/${article.id}`, 'DELETE'); await refresh() })}>Delete article</button>}</article>)}</section>}
       {view === 'team' && <section className="panel workspace-form"><h2>Team</h2>{members.map(member => <p key={member.id}>{member.email} · {member.role}{canAdmin && member.role === 'agent' && <button disabled={busy} onClick={() => void run(async () => { await api(`/team/${member.id}`, 'DELETE'); await refresh() })}>Remove access</button>}</p>)}{canAdmin && <form onSubmit={event => { const data = values(event); void run(async () => { const result = await api<{ token: string }>('/invitations', 'POST', data); setInvitation(result.token); await refresh() }) }}><label>Invite email<input name="email" type="email" required /></label><label>Role<select name="role"><option>agent</option>{identity.role === 'owner' && <option>admin</option>}</select></label><button disabled={busy}>Create invitation</button></form>}{invitation && <p>Share this token privately (valid 24 hours): <code>{invitation}</code>. No email was sent.</p>}</section>}
       {view === 'activity' && <section className="panel workspace-form"><h2>Audit history</h2>{audit.map(event => <p key={event.id}><time>{new Date(event.created_at * 1000).toLocaleString()}</time> · {event.action} · {event.resource_id}</p>)}</section>}
-      {view === 'integrations' && <section className="panel workspace-form"><h2>Gmail connection</h2>{canAdmin ? <><p>Connect a dedicated support mailbox. Import currently covers the latest 50 inbox messages as plain text. Attachments and full-history synchronization are pending.</p><div className="workspace-actions"><button disabled={busy} onClick={() => void run(async () => { const result = await api<{ url: string }>('/integrations/gmail/connect', 'POST'); const url = new URL(result.url); if (url.origin !== 'https://accounts.google.com') throw new Error('Unexpected authorization URL'); window.location.assign(url.href) })}>Connect / reconnect Gmail</button><button disabled={busy} onClick={() => void run(async () => setMailbox(await api('/integrations/gmail')))}>Check connection</button><button disabled={busy} onClick={() => void run(async () => { await api('/integrations/gmail/sync', 'POST'); await refresh(); setMailbox(await api('/integrations/gmail')) })}>Import inbox</button><button disabled={busy} onClick={() => void run(async () => { await api('/integrations/gmail', 'DELETE'); setMailbox(await api('/integrations/gmail')) })}>Disconnect Gmail</button></div>{mailbox && <p>{mailbox.email || 'No mailbox'} · {mailbox.status}</p>}<p>Sending is disabled until the operator explicitly enables outbound email. An uncertain send requires manual inspection of Gmail; it is never retried automatically.</p></> : <p>An administrator manages mailbox connections.</p>}</section>}
+      {view === 'integrations' && <section className="panel workspace-form"><h2>Gmail connection</h2>{canAdmin ? <><p>Connect a dedicated support mailbox. Inbox imports are paginated and resume after restarts. Supported attachments are encrypted; HTML-only messages need review in Gmail. Background synchronization runs while the service is awake.</p><div className="workspace-actions"><button disabled={busy} onClick={() => void run(async () => { const result = await api<{ url: string }>('/integrations/gmail/connect', 'POST'); const url = new URL(result.url); if (url.origin !== 'https://accounts.google.com') throw new Error('Unexpected authorization URL'); window.location.assign(url.href) })}>Connect / reconnect Gmail</button><button disabled={busy} onClick={() => void run(async () => setMailbox(await api('/integrations/gmail')))}>Check connection</button><button disabled={busy} onClick={() => void run(async () => { await api('/integrations/gmail/sync', 'POST'); await refresh(); setMailbox(await api('/integrations/gmail')) })}>Import inbox</button><button disabled={busy} onClick={() => void run(async () => { await api('/integrations/gmail', 'DELETE'); setMailbox(await api('/integrations/gmail')) })}>Disconnect Gmail</button></div>{mailbox && <p>{mailbox.email || 'No mailbox'} · {mailbox.status}</p>}<p>Sending is disabled until the operator explicitly enables outbound email. An uncertain send requires manual inspection of Gmail; it is never retried automatically.</p></> : <p>An administrator manages mailbox connections.</p>}</section>}
       </div>
     </main>
   </div>
