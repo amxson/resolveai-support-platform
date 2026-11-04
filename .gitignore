@@ -3,9 +3,14 @@
 __pycache__/
 *.pyc
 .env.local
+.env.workspace
 node_modules/
 dist/
 .vercel/
 .pytest_cache/
 *.tsbuildinfo
 .DS_Store
+*.db
+.ruff_cache/
+playwright-report/
+test-results/

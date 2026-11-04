@@ -1,0 +1,25 @@
+.workspace .workspace-form { padding: 24px; margin-bottom: 20px; }
+.workspace { font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 15px; }
+.workspace h2 { font-size: 20px; }
+.workspace .nav-list { margin-top: 24px; }
+.workspace .sidebar-user { margin-top: auto; }
+.workspace button:not(.nav-item):not(.primary-button):not(.workspace-ticket) { border: 1px solid #c6d5ce; border-radius: 7px; background: #f7faf8; color: #234b3d; }
+.workspace button, .workspace input, .workspace textarea, .workspace select { font: inherit; }
+.workspace .main-content { margin-left: 264px; }
+.workspace .page-header { height: auto; min-height: 110px; gap: 20px; }
+.workspace .page-header p { max-width: 700px; }
+.workspace .workspace-form form { display: grid; gap: 12px; margin: 16px 0; }
+.workspace label { display: grid; gap: 6px; margin-bottom: 12px; font-size: 14px; }
+.workspace input, .workspace textarea, .workspace select { width: 100%; min-width: 0; padding: 10px; border: 1px solid #b2c4bc; border-radius: 6px; background: white; color: #193b30; font: inherit; }
+.workspace textarea { min-height: 100px; resize: vertical; }
+.workspace button { cursor: pointer; padding: 10px 14px; }
+.workspace button:disabled { opacity: .55; cursor: wait; }
+.workspace :focus-visible { outline: 3px solid #2f7d68; outline-offset: 3px; }
+.workspace .workspace-ticket { display: flex; flex-wrap: wrap; justify-content: space-between; width: 100%; text-align: left; background: #f3f7f4; border: 0; border-bottom: 1px solid #d8e2db; gap: 12px; }
+.workspace .workspace-message { border-left: 3px solid #2f7d68; padding: 12px; margin: 12px 0; }
+.workspace p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.workspace .workspace-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.workspace code { overflow-wrap: anywhere; }
+.auth-page { min-height: 100vh; display: grid; place-items: center; padding: 20px; background: #f2f5f1; }
+.auth-page > form { width: min(100%, 480px); display: grid; gap: 12px; }
+@media(max-width: 900px) { .workspace.app-shell { display: block; } .workspace .sidebar { position: static; width: auto; height: auto; transform: none; } .workspace .main-content { margin-left: 0; } .workspace .nav-list { display: flex; flex-wrap: wrap; } }

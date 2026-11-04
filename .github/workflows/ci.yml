@@ -10,6 +10,17 @@ permissions:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: resolveai
+          POSTGRES_PASSWORD: test-only-password
+          POSTGRES_DB: resolveai_test
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://resolveai:test-only-password@localhost:5432/resolveai_test
     defaults:
       run:
         working-directory: backend
@@ -20,8 +31,11 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: backend/requirements.txt
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements-production.txt ruff pip-audit
+      - run: ruff check production migrations tests/conftest.py tests/test_workspace.py tests/test_grounded_ai.py tests/test_files.py tests/test_mailbox_sync.py
+      - run: ruff format --check production migrations tests/conftest.py tests/test_workspace.py tests/test_grounded_ai.py tests/test_files.py tests/test_mailbox_sync.py
       - run: python -m pytest -q
+      - run: pip-audit -r requirements-production.txt
 
   frontend:
     runs-on: ubuntu-latest
@@ -37,4 +51,25 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run build
+      - run: npm audit --audit-level=moderate
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: python -m venv .venv
+      - run: .venv/bin/pip install -r backend/requirements-production.txt
+      - run: .venv/bin/python tools/test_local_setup.py
+      - run: npm ci
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npx playwright test
+        working-directory: frontend
 
