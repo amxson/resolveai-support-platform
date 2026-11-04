@@ -8,6 +8,10 @@ protection, versioned draft approval and audit history. See
 The existing screenshots and demo instructions below describe the portfolio
 environment. They do not establish production readiness.
 
+The workspace also includes leased Gemini analysis jobs with validated citations,
+and a Gmail OAuth/import/send path. Provider acceptance, AI quality and real
+delivery still require live test-account verification. See [integration setup](docs/INTEGRATIONS.md).
+
 ![ResolveAI dashboard](screenshots/01-dashboard.png)
 
 ResolveAI Support Platform is an **AI-powered customer support operations prototype** built to demonstrate multi-agent automation, ticket triage, response drafting, knowledge retrieval, quality review, escalation decisions, and support analytics.

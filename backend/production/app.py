@@ -20,6 +20,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 
 from production.database import (
+    AnalysisJob,
     Article,
     Audit,
     Invitation,
@@ -211,7 +212,7 @@ def create_app(database_url=None, secure_cookies=None, origins=None):
             model.id == resource_id, model.organization_id == member.organization_id
         )
         if lock:
-            query = query.with_for_update()
+            query = query.with_for_update(key_share=True)
         obj = db.scalar(query)
         if obj is None:
             raise HTTPException(404, "Record not found")
@@ -707,4 +708,55 @@ def create_app(database_url=None, secure_cookies=None, origins=None):
             "email_delivery": "not_configured",
         }
 
+    @app.post("/tickets/{ticket_id}/analyze", status_code=202)
+    def enqueue_analysis(
+        ticket_id: str,
+        member=Depends(principal),
+        db=Depends(db_session, scope="function"),
+    ):
+        if not os.environ.get("GEMINI_API_KEY") or not os.environ.get("GEMINI_MODEL"):
+            raise HTTPException(503, "Gemini is not configured")
+        ticket = find(db, Ticket, ticket_id, member, True)
+        active = db.scalar(
+            select(AnalysisJob).where(
+                AnalysisJob.organization_id == member.organization_id,
+                AnalysisJob.ticket_id == ticket_id,
+                AnalysisJob.status.in_(["pending", "running"]),
+            )
+        )
+        if active:
+            return {"job_id": active.id, "status": active.status}
+        job = AnalysisJob(
+            organization_id=member.organization_id,
+            actor_id=member.user_id,
+            ticket_id=ticket_id,
+            draft_version=ticket.draft_version,
+        )
+        db.add(job)
+        db.flush()
+        audit(db, member, "analysis.queued", ticket_id, job_id=job.id)
+        return {"job_id": job.id, "status": job.status}
+
+    @app.get("/tickets/{ticket_id}/analysis")
+    def analysis_history(
+        ticket_id: str,
+        member=Depends(principal),
+        db=Depends(db_session, scope="function"),
+    ):
+        find(db, Ticket, ticket_id, member)
+        return list(
+            db.scalars(
+                select(AnalysisJob)
+                .where(
+                    AnalysisJob.organization_id == member.organization_id,
+                    AnalysisJob.ticket_id == ticket_id,
+                )
+                .order_by(AnalysisJob.created_at.desc())
+                .limit(20)
+            )
+        )
+
+    from production.gmail import register
+
+    register(app, principal, db_session, find, admin, audit, digest, sessions)
     return app

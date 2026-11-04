@@ -1,0 +1,49 @@
+# Local/staging composition template. Not deployed or verified with Docker yet.
+services:
+  database:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: resolveai
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?Set a private database password}
+      POSTGRES_DB: resolveai
+    volumes: [workspace-db:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U resolveai -d resolveai']
+      interval: 5s
+      retries: 20
+  migrate:
+    build:
+      context: backend
+      dockerfile: Dockerfile.workspace
+    env_file: .env.workspace
+    command: [alembic, upgrade, head]
+    depends_on:
+      database:
+        condition: service_healthy
+  api:
+    build:
+      context: backend
+      dockerfile: Dockerfile.workspace
+    env_file: .env.workspace
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+  worker:
+    build:
+      context: backend
+      dockerfile: Dockerfile.workspace
+    env_file: .env.workspace
+    command: [python, -m, production.worker]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+  web:
+    build:
+      context: frontend
+      dockerfile: Dockerfile.workspace
+    ports: ['127.0.0.1:8080:8080']
+    depends_on: [api]
+volumes:
+  workspace-db:

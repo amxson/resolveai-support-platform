@@ -61,11 +61,16 @@ to schema-compatible versions; do not downgrade customer data as a shortcut.
 
 ## Pending release gates
 
-Gmail OAuth/sync/send, encrypted integration credentials, real Gemini execution,
-document parsing/embeddings/vector retrieval, durable workers, attachments,
+Gmail/Gemini live acceptance, complete channel synchronization, document
+parsing/embeddings/vector retrieval, scheduled mailbox workers, attachments,
 retention/deletion, AI evaluations, password recovery, workspace switching,
 monitoring/alerts, restore drills and load tests remain. No provider delivery,
 production deployment or customer adoption is claimed.
+
+Gmail OAuth, encrypted refresh tokens, bounded manual inbox ingestion and
+version-approved send attempts are implemented; see [integration limits and setup](INTEGRATIONS.md).
+Gemini execution and durable analysis workers are implemented with provider-double
+tests. These tests are not live-provider acceptance or AI quality evaluations.
 
 References: [OWASP sessions](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html),
 [OWASP CSRF](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html),

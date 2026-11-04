@@ -9,7 +9,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from production.app import create_app
-from production.database import Session, now
+from production.database import AnalysisJob, Session, now
+from production.worker import run_once
 
 PASSWORD = "a-long-test-password-42"
 
@@ -83,7 +84,7 @@ def test_persistence_approval_and_conflicting_edits(application):
     )
     detail = client.get(f"/tickets/{tid}").json()
     assert detail["ticket"]["approved_version"] is None
-    url = str(application.state.engine.url)
+    url = application.state.engine.url.render_as_string(hide_password=False)
     restarted = TestClient(create_app(url, secure_cookies=False))
     restarted.cookies.update(client.cookies)
     assert (
@@ -234,3 +235,155 @@ def test_production_configuration_fails_closed(monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
     with pytest.raises(RuntimeError):
         create_app("sqlite://", secure_cookies=False)
+
+
+def test_analysis_jobs_failure_retries_and_human_edit_protection(
+    application, monkeypatch
+):
+    client = account(application)
+    other = account(application, "other@example.com")
+    tid = ticket(client)
+    assert client.post(f"/tickets/{tid}/analyze").status_code == 503
+    monkeypatch.setenv("GEMINI_API_KEY", "test-only-key")
+    monkeypatch.setenv("GEMINI_MODEL", "test-model")
+    job_id = client.post(f"/tickets/{tid}/analyze").json()["job_id"]
+    assert client.post(f"/tickets/{tid}/analyze").json()["job_id"] == job_id
+    assert other.get(f"/tickets/{tid}/analysis").status_code == 404
+
+    def failing(*args):
+        raise TimeoutError("sensitive provider error should not be persisted")
+
+    for _attempt in range(3):
+        with application.state.sessions.begin() as db:
+            job = db.get(AnalysisJob, job_id)
+            job.available_at = 0
+        assert run_once(application.state.sessions, failing)
+    job = client.get(f"/tickets/{tid}/analysis").json()[0]
+    assert job["status"] == "failed" and job["attempts"] == 3
+    assert job["error"] == "TimeoutError" and job["result"] == {}
+    assert client.get(f"/tickets/{tid}").json()["ticket"]["status"] == "escalated"
+    client.post(f"/tickets/{tid}/analyze")
+    client.put(f"/tickets/{tid}/draft", json={"body": "Human response", "version": 0})
+
+    def successful(*args):
+        return {
+            "draft": "Generated response",
+            "escalate": False,
+            "provider_called": True,
+        }
+
+    assert run_once(application.state.sessions, successful)
+    assert client.get(f"/tickets/{tid}/analysis").json()[0]["status"] == "conflict"
+    assert client.get(f"/tickets/{tid}").json()["ticket"]["draft"] == "Human response"
+
+
+def test_gmail_oauth_ingestion_duplicates_and_approved_send(application, monkeypatch):
+    import base64
+    from urllib.parse import parse_qs, urlparse
+
+    from cryptography.fernet import Fernet
+
+    from production import gmail as channel
+
+    client = account(application)
+    other = account(application, "other@example.com")
+    assert client.post("/integrations/gmail/connect").status_code == 503
+    for key in ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI"]:
+        monkeypatch.setenv(key, "test-only-value")
+    monkeypatch.setenv("OAUTH_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    monkeypatch.setattr(
+        channel,
+        "token_request",
+        lambda data: {
+            "access_token": "test",
+            "refresh_token": "private-refresh",
+            "scope": channel.SCOPES,
+        },
+    )
+    sent = []
+
+    def provider(token, method, path, **kwargs):
+        if path == "profile":
+            return {"emailAddress": "support@example.com"}
+        if path == "messages":
+            return {"messages": [{"id": "m1"}, {"id": "m2"}]}
+        if path in {"messages/m1", "messages/m2"}:
+            return {
+                "threadId": "thread-one",
+                "payload": {
+                    "mimeType": "text/plain",
+                    "headers": [
+                        {"name": "From", "value": "Customer <customer@example.com>"},
+                        {"name": "Subject", "value": "Where is my order"},
+                        {"name": "Message-ID", "value": "<customer-1@example.com>"},
+                    ],
+                    "body": {
+                        "data": base64.urlsafe_b64encode(
+                            b"Please check my order"
+                        ).decode()
+                    },
+                },
+            }
+        if path == "messages/send":
+            sent.append(kwargs["json"])
+            return {"id": "sent-one"}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(channel, "gmail", provider)
+    state = parse_qs(
+        urlparse(client.post("/integrations/gmail/connect").json()["url"]).query
+    )["state"][0]
+    assert (
+        other.get(
+            "/integrations/gmail/callback", params={"state": state, "code": "test"}
+        ).status_code
+        == 400
+    )
+    assert (
+        client.get(
+            "/integrations/gmail/callback", params={"state": state, "code": "test"}
+        ).status_code
+        == 200
+    )
+    assert (
+        client.get(
+            "/integrations/gmail/callback", params={"state": state, "code": "test"}
+        ).status_code
+        == 400
+    )
+    assert client.post("/integrations/gmail/sync").json()["imported"] == 2
+    assert client.post("/integrations/gmail/sync").json()["imported"] == 0
+    tickets = client.get("/tickets").json()
+    assert len(tickets) == 1
+    tid = tickets[0]["id"]
+    assert len(client.get(f"/tickets/{tid}").json()["messages"]) == 2
+    assert other.get("/tickets").json() == []
+    initial_version = tickets[0]["draft_version"]
+    data = {"version": initial_version + 1, "recipient": "customer@example.com"}
+    assert client.post(f"/tickets/{tid}/send", json=data).status_code == 403
+    monkeypatch.setenv("ENABLE_EMAIL_SEND", "true")
+    assert client.post(f"/tickets/{tid}/send", json=data).status_code == 409
+    client.put(
+        f"/tickets/{tid}/draft",
+        json={"body": "We will check your order", "version": initial_version},
+    )
+    client.post(f"/tickets/{tid}/approve", json={"version": initial_version + 1})
+    assert (
+        client.post(f"/tickets/{tid}/send", json=data).json()["provider_id"]
+        == "sent-one"
+    )
+    assert client.post(f"/tickets/{tid}/send", json=data).json()["status"] == "accepted"
+    assert len(sent) == 1 and sent[0]["threadId"] == "thread-one"
+    client.put(
+        f"/tickets/{tid}/draft",
+        json={"body": "Updated response", "version": initial_version + 1},
+    )
+    client.post(f"/tickets/{tid}/approve", json={"version": initial_version + 2})
+
+    def timeout(*args, **kwargs):
+        raise TimeoutError("Ambiguous outcome")
+
+    monkeypatch.setattr(channel, "gmail", timeout)
+    data["version"] = initial_version + 2
+    assert client.post(f"/tickets/{tid}/send", json=data).status_code == 502
+    assert client.post(f"/tickets/{tid}/send", json=data).json()["status"] == "unknown"

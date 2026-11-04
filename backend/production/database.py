@@ -119,3 +119,71 @@ class RateWindow(Base):
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
     count: Mapped[int] = mapped_column(default=0)
     reset_at: Mapped[float]
+
+
+class AnalysisJob(Base):
+    __tablename__ = "analysis_jobs"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.id"), index=True
+    )
+    ticket_id: Mapped[str] = mapped_column(ForeignKey("support_tickets.id"))
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    attempts: Mapped[int] = mapped_column(default=0)
+    available_at: Mapped[float] = mapped_column(default=now)
+    lease: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    lease_until: Mapped[float] = mapped_column(default=0)
+    draft_version: Mapped[int]
+    result: Mapped[dict] = mapped_column(JSON, default=dict)
+    error: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[float] = mapped_column(default=now)
+
+
+class Mailbox(Base):
+    __tablename__ = "mailboxes"
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.id"), primary_key=True
+    )
+    email: Mapped[str] = mapped_column(String(254))
+    refresh_token: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(24), default="connected")
+
+
+class OAuthState(Base):
+    __tablename__ = "oauth_states"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    expires_at: Mapped[float]
+
+
+class MailThread(Base):
+    __tablename__ = "mail_threads"
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.id"), primary_key=True
+    )
+    thread_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    ticket_id: Mapped[str] = mapped_column(ForeignKey("support_tickets.id"))
+    reply_message_id: Mapped[str] = mapped_column(String(1000))
+
+
+class MailReceipt(Base):
+    __tablename__ = "mail_receipts"
+    organization_id: Mapped[str] = mapped_column(
+        ForeignKey("organizations.id"), primary_key=True
+    )
+    provider_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+
+
+class Outbound(Base):
+    __tablename__ = "outbound_messages"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "ticket_id", "draft_version"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"))
+    ticket_id: Mapped[str] = mapped_column(ForeignKey("support_tickets.id"))
+    draft_version: Mapped[int]
+    status: Mapped[str] = mapped_column(String(20), default="sending")
+    provider_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
