@@ -1,5 +1,13 @@
 # ResolveAI Support Platform
 
+**Production transformation in progress:** the separate authenticated workspace
+now has persistent records, organization roles, invitations, session/CSRF
+protection, versioned draft approval and audit history. See
+[workspace setup and limits](docs/WORKSPACE.md) and
+[audit and implementation phases](docs/TRANSFORMATION.md).
+The existing screenshots and demo instructions below describe the portfolio
+environment. They do not establish production readiness.
+
 ![ResolveAI dashboard](screenshots/01-dashboard.png)
 
 ResolveAI Support Platform is an **AI-powered customer support operations prototype** built to demonstrate multi-agent automation, ticket triage, response drafting, knowledge retrieval, quality review, escalation decisions, and support analytics.
