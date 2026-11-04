@@ -43,7 +43,9 @@ draft. Verify provider IDs and actual inbox delivery; Gmail acceptance alone is
 insufficient. The dedicated mailbox is connected; real inbox import and encrypted
 attachment ingestion were observed locally. The free Neon database was created
 and the private workspace snapshot imported with all row counts verified.
-Gemini live generation returned busy responses/timeouts, so it is not passed.
+Gemini live generation returned busy responses/timeouts, and the real hosted
+worker exhausted three attempts for an isolated grounded test, so successful
+generation is not passed. The owner declined real test sending; it remains disabled.
 The restricted free evaluation deployment is live on Vercel + Render + Neon.
 Eight hosted acceptance groups passed through the real frontend proxy; temporary
 test tenants were removed. See [release evidence and limitations](HOSTED-RELEASE.md).

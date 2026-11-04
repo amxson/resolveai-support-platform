@@ -26,9 +26,9 @@ the frontend. Server secrets are in Render and the private local settings folder
 
 - Backend revision `66d6179d2810316688c47acdfe8c67681260c306` deployed on Render;
   `/health` returns workspace mode and `/ready` verifies the migrated database.
-- Frontend revision `d247ce3` deployed on Vercel, deployment
-  `dpl_7EUAYn5X485d85HmgA1mXEHNRC7v`, with the production alias above.
-- [GitHub checks](https://github.com/amxson/resolveai-support-platform/actions/runs/41810364313):
+- Frontend revision `028bdef4d25eccd0c6cd1c3f5d9c2ead918eff2a` deployed on Vercel, deployment
+  `dpl_9LJyydPPgDs5VqejtGGtLWLD89E5`, with the production alias above.
+- [GitHub checks](https://github.com/amxson/resolveai-support-platform/actions/runs/41812103815):
   PostgreSQL suite, browser acceptance, builds, Ruff and dependency audits passed.
   Local backend suite: 37 passed. Local browser suite also passed after adding
   session restoration and attachment upload/download checks.
@@ -49,7 +49,10 @@ unverified. Outbound sending stays disabled. Approval, edit invalidation and
 the disabled-send rejection passed hosted checks without sending mail.
 
 Live Gemini generation attempts returned HTTP 503 or timed out, including a
-lightweight model probe. A successful grounded generation is not claimed.
+lightweight model probe. A grounded synthetic job also ran on the real hosted
+worker and exhausted its three attempts with provider HTTP errors. Its isolated
+test records were removed. A direct configured-model diagnostic confirmed
+HTTP 503 UNAVAILABLE / high demand. A successful grounded generation is not claimed.
 Provider-double tests verify schema/citation checks and failure handling. The
 hosted worker test verifies escalation without a policy; it does not prove model
 availability or answer quality. Add actual workspace policies before analyzing
