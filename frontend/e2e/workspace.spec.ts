@@ -23,7 +23,7 @@ test('create a workspace, handle a ticket, approve a draft, and review audit his
   await page.getByRole('button', { name: 'Save draft', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Approve saved draft' })).toBeEnabled()
   await page.getByRole('button', { name: 'Approve saved draft' }).click()
-  await expect(page.getByText('Version 1 approved. Email not sent.')).toBeVisible()
+  await expect(page.getByText('Version 1 approved. Approval does not send email.')).toBeVisible()
   for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 })
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy()
@@ -36,3 +36,4 @@ test('create a workspace, handle a ticket, approve a draft, and review audit his
   await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible()
   expect(errors).toEqual([])
 })
+

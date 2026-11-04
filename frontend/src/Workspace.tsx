@@ -104,7 +104,7 @@ export default function Workspace() {
           <div className="workspace-actions"><button disabled={busy || !draft} onClick={() => void run(async () => { await api(`/tickets/${selected.id}/draft`, 'PUT', { body: draft, version: selected.draft_version }); await open(selected); await refresh() })}>Save draft</button>
           <button disabled={busy || !selected.draft || draft !== selected.draft} onClick={() => void run(async () => { await api(`/tickets/${selected.id}/approve`, 'POST', { version: selected.draft_version }); await open(selected); await refresh() })}>Approve saved draft</button>
           <button disabled={busy || selected.approved_version === null} onClick={() => void run(async () => { await api(`/tickets/${selected.id}/reject`, 'POST'); await open(selected); await refresh() })}>Reject approval</button></div>
-          <p>{selected.approved_version === null ? 'Awaiting review' : `Version ${selected.approved_version} approved. Email not sent.`}</p>
+          <p>{selected.approved_version === null ? 'Awaiting review' : `Version ${selected.approved_version} approved. Approval does not send email.`}</p>
           {selected.approved_version !== null && <form onSubmit={event => { const data = values(event); void run(async () => { const result = await api<{ status: string; provider_id?: string }>(`/tickets/${selected.id}/send`, 'POST', { version: selected.approved_version, recipient: data.recipient }); setDelivery(`${result.status}${result.provider_id ? ` · provider reference ${result.provider_id}` : ''}`); await refresh() }) }}><label>Confirm recipient before sending<input name="recipient" type="email" placeholder={selected.customer_email} required /></label><button disabled={busy}>Send approved response through Gmail</button>{delivery && <p role="status">{delivery}. Provider acceptance is not proof of recipient delivery.</p>}</form>}
         </section>}
       </>}
@@ -116,3 +116,4 @@ export default function Workspace() {
     </main>
   </div>
 }
+
